@@ -3,9 +3,7 @@ name = "admin"
 main = "worker.js"
 compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
 
-# Triggers from the code: Saturday 00:00 UTC and Friday 14:00 UTC
-[triggers]
-crons = ["0 0 * * 6", "0 14 * * 5"]
+# No cron triggers: the PlayHQ sync runs by hand only.
 
 [[d1_databases]]
 binding = "DB"
