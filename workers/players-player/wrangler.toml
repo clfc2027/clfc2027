@@ -1,0 +1,15 @@
+# Players' Player voting Worker (players-player), code exactly as deployed.
+name = "players-player"
+main = "worker.js"
+compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "clfc-assets"
+
+# Secret set in the dashboard, not in this file: ADMIN_PASSCODE
