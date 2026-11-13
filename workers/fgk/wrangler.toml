@@ -1,0 +1,14 @@
+# FGK (First Goal Kicker) wheel worker. Code exactly as deployed on Cloudflare.
+name = "fgk"
+main = "worker.js"
+compatibility_date = "2026-08-31"
+
+# Bindings and secrets set in the Cloudflare dashboard:
+#   D1 binding DB -> playhq-warriors (confirm database_id in Settings > Bindings)
+#   Secret ADMIN_PASSCODE
+# No cron triggers.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
