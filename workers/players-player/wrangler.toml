@@ -1,7 +1,7 @@
 # Players' Player voting Worker (players-player), code exactly as deployed.
 name = "players-player"
 main = "worker.js"
-compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
+compatibility_date = "2026-11-07"
 
 [[d1_databases]]
 binding = "DB"
