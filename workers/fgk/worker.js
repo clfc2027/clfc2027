@@ -523,7 +523,7 @@ async function syncFixturesForTeam(db, apiKey, team) {
 __name(syncFixturesForTeam, "syncFixturesForTeam");
 __name2(syncFixturesForTeam, "syncFixturesForTeam");
 async function nextEligibleFixture(db, teamId) {
-  return db.prepare(`SELECT * FROM fixtures WHERE team_id = ? AND status != 'FINAL' ORDER BY game_date ASC, game_time ASC LIMIT 1`).bind(teamId).first();
+  return db.prepare(`SELECT * FROM fixtures WHERE team_id = ? AND status = 'UPCOMING' ORDER BY game_date ASC, game_time ASC LIMIT 1`).bind(teamId).first();
 }
 __name(nextEligibleFixture, "nextEligibleFixture");
 __name2(nextEligibleFixture, "nextEligibleFixture");

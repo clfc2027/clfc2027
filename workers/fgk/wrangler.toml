@@ -1,23 +1,12 @@
 # FGK (First Goal Kicker) wheel worker.
-# Reads fixtures and team sheets from D1 written by the admin (playhq-admin) sync.
-# Makes no PlayHQ calls.
-#
-# Fill in the TODO values before deploying.
+# Wheel is built on request from the fixture with status UPCOMING.
+# Team sheets come from the admin sync in D1. No PlayHQ calls and no cron.
 
 name = "fgk"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
-# Cron must match the schedule of the existing fgk Worker.
-# TODO: set this to the schedule the current fgk Worker runs on.
-[triggers]
-crons = ["TODO"]
-
-# Must be the same D1 database the admin Worker writes to.
 [[d1_databases]]
 binding = "DB"
-database_name = "TODO"
-database_id = "TODO"
-
-# ADMIN_PASSCODE is a secret. Set it with:
-#   npx.cmd wrangler secret put ADMIN_PASSCODE --name fgk
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
