@@ -1,0 +1,16 @@
+# admin (PlayHQ sync Worker), code exactly as deployed on Cloudflare.
+name = "admin"
+main = "worker.js"
+compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
+
+# Triggers from the code: Saturday 00:00 UTC and Friday 14:00 UTC
+[triggers]
+crons = ["0 0 * * 6", "0 14 * * 5"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors" # TODO: confirm in Settings > Bindings
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# Secrets (dashboard, not in this file): PLAYHQ_API_KEY, ADMIN_PASSCODE
+# Variable (dashboard): PLAYHQ_ORG_ID

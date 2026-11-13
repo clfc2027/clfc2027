@@ -1,0 +1,12 @@
+# coaches-board (AFL team selection), compiled build as deployed on Cloudflare.
+name = "coaches-board"
+main = "worker.js"
+compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors" # TODO: confirm in Settings > Bindings
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# Variable (dashboard): HUB_URL
+# Secrets (dashboard, not in this file): PLAYHQ_API_KEY, ADMIN_PASSCODE
