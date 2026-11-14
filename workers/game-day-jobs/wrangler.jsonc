@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "game-day-jobs",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./public" },
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "playhq-warriors",
+      "database_id": "d0e2a120-9971-4341-9960-9a6fa2d636be",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

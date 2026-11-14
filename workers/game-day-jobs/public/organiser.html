@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Day Jobs Organiser | Cockburn Lakes FC</title>
+<style>
+:root { --navy:#0a1730; --navy-2:#0f2245; --red:#d4283a; --silver:#b8c2d4; --line:rgba(255,255,255,.14); }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:"Inter",-apple-system,"Segoe UI",sans-serif; background:radial-gradient(circle at 15% 0%,var(--navy-2),var(--navy) 55%) fixed; color:#fff; min-height:100vh; }
+#app { max-width:1000px; margin:0 auto; padding:20px 18px 60px; }
+h1 { font:900 22px "Oswald",sans-serif; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+.sub { color:var(--silver); font-size:12px; letter-spacing:.08em; margin-bottom:18px; }
+.card { border:1px solid var(--line); background:rgba(255,255,255,.03); padding:16px; margin-bottom:16px; }
+.row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+label { display:block; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--silver); margin-bottom:4px; }
+input, select { padding:10px 11px; background:rgba(255,255,255,.06); border:1px solid var(--line); color:#fff; font-size:14px; min-width:160px; }
+select option, select optgroup { color:#000; }
+button { padding:10px 16px; background:var(--red); color:#fff; border:0; font-size:12px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
+button.ghost { background:rgba(255,255,255,.08); border:1px solid var(--line); }
+h2 { font:700 16px "Oswald",sans-serif; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+th { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--silver); font-weight:700; }
+td select { width:100%; min-width:0; }
+.tag { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--silver); }
+.tag.manual { color:#ffd34d; }
+.tag.cleared { color:#ff8a94; }
+.tag.pending { color:rgba(255,255,255,.45); }
+.msg { min-height:20px; margin-top:10px; font-size:13px; color:var(--silver); }
+.msg.err { color:#ff8a94; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Game Day Jobs Organiser</h1>
+  <div class="sub">COCKBURN LAKES FC &middot; 2027</div>
+
+  <section class="card" id="loginCard">
+    <div class="row">
+      <div>
+        <label for="pin">PIN</label>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+      </div>
+      <button id="loginBtn" type="button">Open dashboard</button>
+    </div>
+    <div class="msg" id="loginMsg"></div>
+  </section>
+
+  <section class="hidden" id="dash">
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="round">Round</label>
+          <select id="round"></select>
+        </div>
+        <button id="runBtn" class="ghost" type="button">Run allocation now</button>
+        <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div id="games"></div>
+  </section>
+</div>
+
+<script>
+const GRADE_ORDER = ["league", "colts", "reserves", "thirds"];
+const GRADE_LABEL = { league: "League", colts: "Colts", reserves: "Reserves", thirds: "Thirds" };
+const STATUS_LABEL = { auto: "Auto", manual: "Edited", cleared: "Cleared", pending: "Not allocated" };
+
+let pin = sessionStorage.getItem("jobsPin") || "";
+let state = { round: null, jobs: [], pools: {} };
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { "Content-Type": "application/json", "x-organiser-pin": pin, ...(options.headers || {}) },
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || "HTTP " + res.status), { status: res.status });
+  return data;
+}
+
+function setMsg(text, isError) {
+  const el = $("msg");
+  el.textContent = text || "";
+  el.className = "msg" + (isError ? " err" : "");
+}
+
+async function signIn() {
+  pin = $("pin").value.trim();
+  try {
+    await api("/api/organiser/login", { method: "POST" });
+    sessionStorage.setItem("jobsPin", pin);
+    $("loginCard").classList.add("hidden");
+    $("dash").classList.remove("hidden");
+    await loadRound();
+  } catch (err) {
+    $("loginMsg").textContent = err.status === 401 ? "Incorrect PIN" : "Could not sign in: " + err.message;
+    $("loginMsg").className = "msg err";
+  }
+}
+
+function signOut() {
+  pin = "";
+  sessionStorage.removeItem("jobsPin");
+  location.reload();
+}
+
+async function loadRound(round) {
+  try {
+    const data = await api("/api/organiser/jobs" + (round ? "?round=" + encodeURIComponent(round) : ""));
+    state = data;
+    const select = $("round");
+    select.innerHTML = (data.rounds || [])
+      .map((r) => `<option value="${esc(r)}" ${r === data.round ? "selected" : ""}>${esc(r)}</option>`)
+      .join("");
+    renderGames();
+    setMsg(data.round ? "" : "No rounds with fixtures yet.");
+  } catch (err) {
+    setMsg("Could not load jobs: " + err.message, true);
+  }
+}
+
+function playerOptions(supplier, selectedKey) {
+  const groups = supplier
+    .filter((g) => (state.pools[g] || []).length)
+    .map((g) => {
+      const opts = state.pools[g]
+        .map((p) => `<option value="${esc(g + "|" + p.key)}" ${p.key === selectedKey ? "selected" : ""}>${esc(p.name)}</option>`)
+        .join("");
+      return `<optgroup label="${esc(GRADE_LABEL[g])}">${opts}</optgroup>`;
+    })
+    .join("");
+  return `<option value="">— none —</option>${groups}`;
+}
+
+function renderGames() {
+  const byGame = {};
+  for (const j of state.jobs) (byGame[j.game] = byGame[j.game] || []).push(j);
+
+  $("games").innerHTML = GRADE_ORDER.filter((g) => byGame[g]).map((g) => {
+    const jobs = byGame[g];
+    const home = jobs[0].home ? "Home" : "Away";
+    const rows = jobs.map((j) => `
+      <tr>
+        <td>${esc(j.label)}</td>
+        <td><select data-job="${esc(j.job_id)}" data-round="${esc(state.round)}">${playerOptions(j.supplier, j.player_key)}</select></td>
+        <td><span class="tag ${esc(j.status)}">${esc(STATUS_LABEL[j.status] || j.status)}</span></td>
+      </tr>`).join("");
+    return `<section class="card"><h2>${esc(GRADE_LABEL[g])} game &middot; ${home}</h2>
+      <table><thead><tr><th>Job</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  }).join("") || '<div class="card">No jobs for this round yet.</div>';
+
+  document.querySelectorAll("select[data-job]").forEach((el) => {
+    el.addEventListener("change", () => saveJob(el));
+  });
+}
+
+async function saveJob(el) {
+  const jobId = el.dataset.job;
+  const round = el.dataset.round;
+  const value = el.value;
+  let player = null;
+  if (value) {
+    const [grade, key] = value.split("|");
+    const p = (state.pools[grade] || []).find((x) => x.key === key);
+    if (!p) return setMsg("That player is not on the saved board", true);
+    player = { name: p.name, member_id: p.member_id, playhq_player_id: p.playhq_player_id };
+  }
+  el.disabled = true;
+  try {
+    await api("/api/organiser/job", { method: "PUT", body: JSON.stringify({ round, job_id: jobId, player }) });
+    setMsg("Saved");
+    await loadRound(round);
+  } catch (err) {
+    setMsg("Could not save: " + err.message, true);
+    el.disabled = false;
+  }
+}
+
+async function runNow() {
+  setMsg("Running allocation…");
+  try {
+    await api("/api/jobs/run", { method: "POST" });
+    await loadRound(state.round);
+    setMsg("Allocation run");
+  } catch (err) {
+    setMsg("Could not run: " + err.message, true);
+  }
+}
+
+$("loginBtn").addEventListener("click", signIn);
+$("pin").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
+$("signOutBtn").addEventListener("click", signOut);
+$("runBtn").addEventListener("click", runNow);
+$("round").addEventListener("change", (e) => loadRound(e.target.value));
+
+if (pin) {
+  $("loginCard").classList.add("hidden");
+  $("dash").classList.remove("hidden");
+  loadRound();
+}
+</script>
+</body>
+</html>

@@ -93,6 +93,12 @@ h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { fon
   .slot { width: 76px; }
   .slot-card .pname { font-size: 9px; }
 }
+.jobs-card { border: 1px solid var(--line); background: rgba(255,255,255,.03); padding: 16px; margin-top: 18px; }
+.jobs-card h2 { font: 700 14px "Oswald", sans-serif; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 12px; color: var(--silver); }
+.jobs-game { margin-bottom: 12px; }
+.jobs-game-head { font: 700 13px "Oswald", sans-serif; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; background: rgba(255,255,255,.06); margin-bottom: 4px; }
+.jobs-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.jobs-empty { color: rgba(255,255,255,.45); font-style: italic; }
 </style>
 </head>
 <body>
@@ -127,6 +133,11 @@ h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { fon
     </aside>
   </div>
 
+  <section class="jobs-card" id="jobs">
+    <h2>Jobs this week</h2>
+    <div id="jobsBody"><div class="jobs-empty">Loading jobs…</div></div>
+  </section>
+
   <div class="status-line" id="status"></div>
 </div>
 
@@ -135,8 +146,12 @@ h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { fon
 // Base URL of the coaches-board Worker (the API this page reads from).
 const API_BASE = "https://coaches-board.clfc2027.workers.dev";
 // Name of the grade on the board that this page shows (matched against the grade list).
-const GRADE_MATCH = "Colts";
+const GRADE_MATCH = "B Grade";
 const PAGE_TITLE = "Game Day Colts";
+// Grade key used by the jobs Worker (league, colts, reserves or thirds).
+const GRADE_KEY = "colts";
+// Base URL of the game-day-jobs Worker (the jobs API this page reads from).
+const JOBS_API = "https://game-day-jobs.clfc2027.workers.dev";
 const BOARD_YEAR = 2027;
 const INTERCHANGE_COUNT = 4;
 // How often the page checks for a newly saved team (ms).
@@ -294,11 +309,58 @@ async function loadBoard() {
   }
 }
 
+// ---- Jobs (this grade's jobs for the week) ----
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+  return data;
+}
+
+async function loadJobs() {
+  const body = document.getElementById("jobsBody");
+  try {
+    const data = await fetchJson(JOBS_API + "/api/jobs?grade=" + encodeURIComponent(GRADE_KEY));
+    renderJobs(data);
+  } catch (err) {
+    body.innerHTML = '<div class="jobs-empty">Could not load jobs: ' + esc(err.message) + "</div>";
+  }
+}
+
+function renderJobs(data) {
+  const body = document.getElementById("jobsBody");
+  if (!data.jobs || !data.jobs.length) {
+    body.innerHTML = '<div class="jobs-empty">No jobs allocated</div>';
+    return;
+  }
+  const games = [];
+  for (const job of data.jobs) {
+    let group = games.find((g) => g.game === job.game);
+    if (!group) {
+      group = { game: job.game, label: job.game_label, home: job.home, rows: [] };
+      games.push(group);
+    }
+    group.rows.push(job);
+  }
+  body.innerHTML = games
+    .map((g) => `
+      <div class="jobs-game">
+        <div class="jobs-game-head">${esc(g.label)} game &middot; ${g.home ? "Home" : "Away"}</div>
+        ${g.rows
+          .map((j) => `<div class="jobs-row"><span>${esc(j.label)}</span>${
+            j.name ? "<span>" + esc(j.name) + "</span>" : '<span class="jobs-empty">No jobs allocated</span>'
+          }</div>`)
+          .join("")}
+      </div>`)
+    .join("");
+}
+
 // ---- Start ----
 loadBoard();
-setInterval(loadBoard, REFRESH_MS);
+loadJobs();
+setInterval(() => { loadBoard(); loadJobs(); }, REFRESH_MS);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) loadBoard();
+  if (!document.hidden) { loadBoard(); loadJobs(); }
 });
 </script>
 </body>
