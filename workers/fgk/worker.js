@@ -1,3 +1,4 @@
+import { passcodeState } from "../../shared/auth.js";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -184,10 +185,8 @@ function json(data, status = 200) {
 __name(json, "json");
 __name2(json, "json");
 function checkPasscode(env, passcode) {
-  // Fail closed: if the ADMIN_PASSCODE secret is not set, nobody gets in.
-  const expected = env.ADMIN_PASSCODE;
-  if (!expected) return false;
-  return String(passcode || "") === expected;
+  // Shared check (shared/auth.js): fails closed if ADMIN_PASSCODE is not set.
+  return passcodeState(passcode, env) === "ok";
 }
 __name(checkPasscode, "checkPasscode");
 __name2(checkPasscode, "checkPasscode");

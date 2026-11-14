@@ -1,3 +1,4 @@
+import { passcodeState } from "../../shared/auth.js";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -49,9 +50,15 @@ function html(body, status = 200) {
 __name(html, "html");
 __name2(html, "html");
 function requireAdmin(request, env) {
-  if (!env.ADMIN_PASSCODE) return;
   const supplied = request.headers.get("x-admin-passcode") || request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
-  if (supplied !== env.ADMIN_PASSCODE) {
+  const state = passcodeState(supplied, env); // shared/auth.js
+  if (state === "not-set") {
+    // Fail closed: a missing secret must never mean open access.
+    const err = new Error("Admin passcode is not set up on the server");
+    err.status = 500;
+    throw err;
+  }
+  if (state !== "ok") {
     const err = new Error("Unauthorised");
     err.status = 401;
     throw err;
