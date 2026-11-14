@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Day League | Cockburn Lakes FC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Oswald:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #0a1730;
+  --navy-2: #0f2245;
+  --red: #d4283a;
+  --red-dark: #a91f2e;
+  --silver: #b8c2d4;
+  --line: rgba(255,255,255,.14);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 15% 0%, var(--navy-2), var(--navy) 55%) fixed;
+  color: #fff;
+  min-height: 100vh;
+}
+h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { font-family: "Oswald", "Arial Narrow", sans-serif; text-transform: uppercase; letter-spacing: .02em; }
+
+#app { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
+
+.masthead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border: 1px solid var(--line); background: linear-gradient(100deg, rgba(10,23,48,.9), rgba(15,34,69,.7)); margin-bottom: 18px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(160deg, var(--red), var(--red-dark)); display: grid; place-items: center; font: 900 16px/1 "Oswald", sans-serif; box-shadow: 0 0 0 3px rgba(255,255,255,.12); }
+.masthead h1 { font-size: 20px; letter-spacing: .06em; }
+.masthead .sub { color: var(--silver); font-size: 11px; letter-spacing: .1em; }
+.updated { font-size: 11px; color: var(--silver); letter-spacing: .06em; text-align: right; }
+
+.team-banner { text-align: center; padding: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.03); margin-bottom: 18px; }
+.team-banner .club { font-size: 12px; letter-spacing: .18em; color: var(--silver); }
+.team-banner .grade { font: 900 30px/1.05 "Oswald", sans-serif; margin: 4px 0; }
+.team-banner .round { font-size: 13px; color: var(--silver); letter-spacing: .08em; margin-bottom: 6px; }
+.team-banner .versus { display: flex; align-items: center; justify-content: center; gap: 14px; font: 700 18px "Oswald", sans-serif; text-transform: uppercase; }
+.team-banner .versus .vs { color: var(--red); font-size: 12px; letter-spacing: .2em; }
+.team-banner .empty-note { font-size: 13px; color: var(--silver); }
+
+.board-layout { display: grid; grid-template-columns: 1fr 220px; gap: 18px; }
+.oval-wrap {
+  position: relative; aspect-ratio: 4 / 5;
+  background: radial-gradient(ellipse at center, #1c5c33 0%, #164a29 70%, #123f22 100%);
+  border-radius: 50% / 42%;
+  border: 3px solid rgba(255,255,255,.5);
+  box-shadow: inset 0 0 60px rgba(0,0,0,.4), 0 20px 50px rgba(0,0,0,.4);
+  overflow: hidden;
+}
+.oval-wrap::before, .oval-wrap::after {
+  content: ""; position: absolute; left: 15%; right: 15%; height: 34%;
+  border: 1px dashed rgba(255,255,255,.35); border-bottom: 0; border-radius: 50% 50% 0 0;
+}
+.oval-wrap::before { top: 6%; }
+.oval-wrap::after { bottom: 6%; transform: rotate(180deg); }
+.third-line { position: absolute; left: 4%; right: 4%; height: 0; border-top: 1px dashed rgba(255,255,255,.3); }
+.third-line.top { top: 33%; }
+.third-line.bottom { top: 67%; }
+.centre-square { position: absolute; left: 28%; right: 28%; top: 36%; height: 30%; border: 1px solid rgba(255,255,255,.4); }
+.centre-circle { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; }
+.arc-label { position: absolute; font: 700 13px "Oswald", sans-serif; color: rgba(255,255,255,.55); letter-spacing: .04em; }
+.arc-label.top { top: 3%; right: 4%; }
+.arc-label.bottom { bottom: 3%; left: 4%; }
+.line-label { position: absolute; left: -2px; font: 700 9px "Oswald", sans-serif; letter-spacing: .12em; color: rgba(255,255,255,.4); writing-mode: vertical-rl; text-orientation: mixed; }
+.line-label.backs { top: 6%; }
+.line-label.forwards { bottom: 6%; }
+
+.slot { position: absolute; transform: translate(-50%, -50%); width: 88px; text-align: center; z-index: 5; }
+.slot-card { padding-bottom: 2px; }
+.slot-card .jumper { font: 900 13px "Oswald", sans-serif; color: #fff; padding: 3px 4px 0; line-height: 1.1; min-height: 14px; }
+.slot-card .pname { font-size: 11px; font-weight: 700; color: #fff; padding: 6px 4px; line-height: 1.15; text-transform: none; letter-spacing: 0; }
+.slot-card .pos-label { font-size: 8px; letter-spacing: .07em; color: rgba(255,255,255,.85); text-transform: uppercase; margin-top: 3px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.slot-card[data-line="back"] .pname { background: var(--red); }
+.slot-card[data-line="mid"] .pname { background: #1c4fa8; }
+.slot-card[data-line="forward"] .pname { background: #1c7a3c; }
+.slot-card.empty .pname { background: rgba(255,255,255,.08); border: 1px dashed rgba(255,255,255,.3); color: rgba(255,255,255,.55); font-weight: 400; }
+
+.interchange-panel { border: 1px solid var(--line); background: rgba(255,255,255,.03); padding: 14px; height: fit-content; }
+.interchange-panel h3 { font: 700 12px "Oswald", sans-serif; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; color: var(--silver); }
+.ic-row { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 8px; background: rgba(255,255,255,.06); border: 1px solid var(--line); font-size: 13px; }
+.ic-row .num { font: 900 11px "Oswald", sans-serif; color: var(--silver); width: 14px; }
+.ic-row .ic-name { font-weight: 700; }
+.ic-row.empty { color: rgba(255,255,255,.45); border-style: dashed; }
+
+.status-line { min-height: 20px; margin-top: 14px; text-align: center; font-size: 12px; color: var(--silver); letter-spacing: .04em; }
+.status-line.err { color: #ff8a94; }
+
+@media (max-width: 860px) {
+  .board-layout { grid-template-columns: 1fr; }
+  .slot { width: 76px; }
+  .slot-card .pname { font-size: 9px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="masthead">
+    <div class="brand">
+      <div class="brand-mark">CL</div>
+      <div>
+        <h1>Game Day League</h1>
+        <div class="sub">COCKBURN LAKES FC &middot; 2027</div>
+      </div>
+    </div>
+    <div class="updated" id="updated"></div>
+  </header>
+
+  <section class="team-banner" id="banner"></section>
+
+  <div class="board-layout">
+    <div class="oval-wrap" id="oval">
+      <div class="arc-label top">50</div>
+      <div class="arc-label bottom">50</div>
+      <div class="line-label backs">BACKS</div>
+      <div class="line-label forwards">FORWARDS</div>
+      <div class="third-line top"></div>
+      <div class="third-line bottom"></div>
+      <div class="centre-square"></div>
+      <div class="centre-circle"></div>
+    </div>
+    <aside class="interchange-panel">
+      <h3>Interchange</h3>
+      <div id="interchange"></div>
+    </aside>
+  </div>
+
+  <div class="status-line" id="status"></div>
+</div>
+
+<script>
+// ---- Settings ----
+// Base URL of the coaches-board Worker (the API this page reads from).
+const API_BASE = "https://coaches-board.clfc2027.workers.dev";
+// Name of the grade on the board that this page shows (matched against the grade list).
+const GRADE_MATCH = "B Grade";
+const PAGE_TITLE = "Game Day League";
+const BOARD_YEAR = 2027;
+const INTERCHANGE_COUNT = 4;
+// How often the page checks for a newly saved team (ms).
+const REFRESH_MS = 60000;
+
+// Same 17 positions and pitch coordinates as the coaches board.
+const POSITIONS = [
+  { id: "FULL_BACK", label: "Full Back", x: 50, y: 7, line: "back" },
+  { id: "BACK_POCKET_L", label: "Back Pocket", x: 26, y: 15, line: "back" },
+  { id: "BACK_POCKET_R", label: "Back Pocket", x: 74, y: 15, line: "back" },
+  { id: "BACK_FLANK_L", label: "Back Flank", x: 16, y: 26, line: "back" },
+  { id: "CENTRE_HALF_BACK", label: "Centre Half Back", x: 50, y: 24, line: "back" },
+  { id: "BACK_FLANK_R", label: "Back Flank", x: 84, y: 26, line: "back" },
+  { id: "WING_L", label: "Wing", x: 10, y: 44, line: "mid" },
+  { id: "RUCK", label: "Ruck", x: 41, y: 39, line: "mid" },
+  { id: "RUCK_ROVER", label: "Ruck Rover", x: 59, y: 39, line: "mid" },
+  { id: "CENTRE", label: "Centre", x: 41, y: 51, line: "mid" },
+  { id: "ROVER", label: "Rover", x: 59, y: 51, line: "mid" },
+  { id: "WING_R", label: "Wing", x: 90, y: 44, line: "mid" },
+  { id: "FORWARD_FLANK_L", label: "Forward Flank", x: 16, y: 69, line: "forward" },
+  { id: "CENTRE_HALF_FORWARD", label: "Centre Half Forward", x: 50, y: 71, line: "forward" },
+  { id: "FORWARD_FLANK_R", label: "Forward Flank", x: 84, y: 69, line: "forward" },
+  { id: "FORWARD_POCKET_L", label: "Forward Pocket", x: 26, y: 84, line: "forward" },
+  { id: "FULL_FORWARD", label: "Full Forward", x: 50, y: 92, line: "forward" },
+  { id: "FORWARD_POCKET_R", label: "Forward Pocket", x: 74, y: 84, line: "forward" }
+];
+
+// ---- Helpers ----
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function getJson(path) {
+  const res = await fetch(API_BASE + path, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+  return data;
+}
+
+function findGrade(grades) {
+  const target = GRADE_MATCH.trim().toLowerCase();
+  return (
+    grades.find((g) => (g.grade_name || "").trim().toLowerCase() === target) ||
+    grades.find((g) => (g.grade_name || "").toLowerCase().includes(target)) ||
+    null
+  );
+}
+
+function setStatus(message, isError) {
+  const el = document.getElementById("status");
+  el.textContent = message || "";
+  el.className = "status-line" + (isError ? " err" : "");
+}
+
+// ---- Rendering (read only) ----
+function renderBanner(grade, selection) {
+  const banner = document.getElementById("banner");
+  const gradeName = PAGE_TITLE;
+  if (!selection) {
+    banner.innerHTML = `
+      <div class="club">COCKBURN LAKES</div>
+      <div class="grade">${esc(gradeName)}</div>
+      <div class="empty-note">No team saved yet</div>`;
+    return;
+  }
+  const opponent = selection.opponent_name ? selection.opponent_name.toUpperCase() : "OPPONENT";
+  const details = [selection.match_date, selection.venue_name].filter(Boolean).join(" · ");
+  banner.innerHTML = `
+    <div class="club">COCKBURN LAKES</div>
+    <div class="grade">${esc(gradeName)}</div>
+    <div class="round">${esc(selection.round_name || "")}${details ? " · " + esc(details) : ""}</div>
+    <div class="versus"><span>COCKBURN LAKES</span><span class="vs">VS</span><span>${esc(opponent)}</span></div>`;
+}
+
+function renderSlot(pos, positions) {
+  const card = positions[pos.id];
+  const inner = card
+    ? `${card.jumper ? `<div class="jumper">${esc(card.jumper)}</div>` : ""}<div class="pname">${esc(card.name)}</div>`
+    : `<div class="pname">—</div>`;
+  return `
+    <div class="slot" style="left:${pos.x}%; top:${pos.y}%;">
+      <div class="slot-card ${card ? "" : "empty"}" data-line="${pos.line}">
+        ${inner}
+        <div class="pos-label">${esc(pos.label)}</div>
+      </div>
+    </div>`;
+}
+
+function renderBoard(positions) {
+  const oval = document.getElementById("oval");
+  const existing = oval.querySelectorAll(".slot");
+  existing.forEach((el) => el.remove());
+  oval.insertAdjacentHTML("beforeend", POSITIONS.map((pos) => renderSlot(pos, positions)).join(""));
+}
+
+function renderInterchange(interchange) {
+  const rows = [];
+  for (let i = 0; i < INTERCHANGE_COUNT; i++) {
+    const card = interchange[i];
+    rows.push(`
+      <div class="ic-row ${card ? "" : "empty"}">
+        <span class="num">${i + 1}</span>
+        <span class="ic-name">${card ? esc(card.name) : "—"}</span>
+      </div>`);
+  }
+  document.getElementById("interchange").innerHTML = rows.join("");
+}
+
+function render(grade, selection, positions, interchange) {
+  renderBanner(grade, selection);
+  renderBoard(positions || {});
+  renderInterchange(interchange || []);
+  document.getElementById("updated").textContent =
+    "Last checked " + new Date().toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
+}
+
+// ---- Data ----
+async function loadBoard() {
+  try {
+    const { grades } = await getJson("/api/grades");
+    const grade = findGrade(grades || []);
+    if (!grade) {
+      render(null, null, {}, []);
+      setStatus(`No ${BOARD_YEAR} ${GRADE_MATCH} grade found on the board yet.`);
+      return;
+    }
+
+    // The most recently saved round for this grade is the one shown.
+    const { history } = await getJson("/api/history?team_id=" + encodeURIComponent(grade.team_id));
+    if (!history || !history.length) {
+      render(grade, null, {}, []);
+      setStatus("");
+      return;
+    }
+
+    const round = history[0].round_name;
+    const data = await getJson(
+      "/api/team?team_id=" + encodeURIComponent(grade.team_id) + "&round=" + encodeURIComponent(round)
+    );
+    if (!data.selection) {
+      render(grade, null, {}, []);
+      setStatus("");
+      return;
+    }
+
+    render(grade, data.selection, data.positions, data.interchange);
+    setStatus("");
+  } catch (err) {
+    setStatus("Could not load the board: " + err.message, true);
+  }
+}
+
+// ---- Start ----
+loadBoard();
+setInterval(loadBoard, REFRESH_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadBoard();
+});
+</script>
+</body>
+</html>
