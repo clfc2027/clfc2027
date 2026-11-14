@@ -1,6 +1,6 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "game-day-colts",
-  "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./public" }
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01"
 }
