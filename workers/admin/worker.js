@@ -99,7 +99,9 @@ if (!year) continue;
 await db.prepare(`
 INSERT INTO seasons (season_year, playhq_season_id, organisation_id, association_id, status)
 VALUES (?,?,?,?,?)
-ON CONFLICT(playhq_season_id) DO UPDATE SET season_year = excluded.season_year
+ON CONFLICT(playhq_season_id) DO UPDATE SET
+  season_year = excluded.season_year,
+  status = excluded.status
 `).bind(year, s.id, orgId, s.association?.id || "", s.status ? String(s.status).toLowerCase() : null).run();
 const seasonRow = await db.prepare(`SELECT id FROM seasons WHERE playhq_season_id = ?`).bind(s.id).first();
 
