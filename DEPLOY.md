@@ -14,7 +14,6 @@ next deploy from the repo and are not recorded anywhere.
 | coaches-board         | `workers/coaches-board`    | `workers/coaches-board/**`, `shared/**`            |
 | fgk                   | `workers/fgk`              | `workers/fgk/**`, `shared/**`                      |
 | players-player        | `workers/players-player`   | `workers/players-player/**`, `shared/**`           |
-| players-player-test   | `workers/players-player-test` | `workers/players-player-test/**`                |
 | game-day              | `workers/game-day`         | `workers/game-day/**`                              |
 
 Settings for every Worker:
