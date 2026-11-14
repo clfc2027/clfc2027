@@ -858,6 +858,7 @@ function getPage() {
       </div>
       <div id="pinLookupResults"></div>
     </div>
+    <button onclick="syncAllWheels()">Sync All Wheels Now</button>
     <button class="danger" onclick="clearAllSpins()">\u26A0\uFE0F Clear All Spins (all grades)</button>
     <div id="msg-admin-panel"></div>
     <div id="adminGrades"></div>
@@ -1181,6 +1182,24 @@ function getPage() {
     loadAdminState();
   };
 
+  window.syncAllWheels = async function () {
+    var msg = document.getElementById('msg-admin-panel');
+    msg.innerHTML = '<div class="msg">Syncing all wheels from PlayHQ...</div>';
+    try {
+      var res = await fetch('/api/sync-now', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed.');
+      var lines = (data.results || []).map(function (r) {
+        var detail = r.status === 'synced' ? ' (' + r.playerCount + ' players)' : (r.error ? ': ' + r.error : '');
+        return esc(r.team) + ': ' + esc(r.status) + esc(detail);
+      });
+      msg.innerHTML = '<div class="msg success">' + (lines.join('<br>') || 'No teams found for 2027.') + '</div>';
+    } catch (e) {
+      msg.innerHTML = '<div class="msg error">' + esc(e.message) + '</div>';
+    }
+    loadAdminState();
+  };
+
   window.clearAllSpins = async function () {
     if (!confirm('This permanently deletes every spin, declared result, and jackpot pot across all 4 grades, and resets all wheels. This cannot be undone. Continue?')) return;
     await fetch('/api/admin/clear-spins', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
@@ -1267,6 +1286,8 @@ var worker_default = {
       return json(detail);
     }
     if (path === "/api/sync-now" && request.method === "POST") {
+      const { passcode } = await request.json().catch(() => ({}));
+      if (!checkPasscode(env, passcode)) return json({ error: "Unauthorized" }, 401);
       const results = await runSync(env);
       return json({ results });
     }
