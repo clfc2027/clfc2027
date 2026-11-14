@@ -1,4 +1,5 @@
 // CLFC PlayHQ Admin worker — passcode protected
+import { passcodeState } from "../../shared/auth.js";
 // The passcode is NOT stored in this file. It is read from the ADMIN_PASSCODE secret.
 // Set it with:  npx.cmd wrangler secret put ADMIN_PASSCODE --name admin
 
@@ -48,13 +49,8 @@ return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).j
 }
 
 async function passcodeOk(request, env) {
-if (!env.ADMIN_PASSCODE) return false; // locked if the secret is missing
-const supplied = request.headers.get("x-admin-passcode") || "";
-// compare hashes so the check takes the same time whatever is typed
-const [a, b] = await Promise.all([sha256Hex(supplied), sha256Hex(env.ADMIN_PASSCODE)]);
-let diff = 0;
-for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-return diff === 0;
+// Shared check (shared/auth.js): locked if the secret is missing.
+return passcodeState(request.headers.get("x-admin-passcode") || "", env) === "ok";
 }
 
 function kickoffToUtcIso(dateStr, timeStr, timeZone) {

@@ -1,4 +1,5 @@
 // players-player Worker (v6)
+import { passcodeState } from "../../shared/auth.js";
 // D1 binding DB      -> playhq-warriors (d0e2a120-9971-4341-9960-9a6fa2d636be)
 // R2 binding ASSETS  -> bucket clfc-assets (logos only, two keys)
 // Secret ADMIN_PASSCODE
@@ -48,12 +49,6 @@ function windowFor(roundKey) {
   };
 }
 
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 const sameName = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
@@ -62,8 +57,7 @@ function validPin(pin) {
 }
 
 function checkAdmin(env, body) {
-  if (!env.ADMIN_PASSCODE) return 'not-set';
-  return typeof body.adminPin === 'string' && safeEqual(body.adminPin, env.ADMIN_PASSCODE) ? 'ok' : 'wrong';
+  return passcodeState(body.adminPin, env); // shared/auth.js
 }
 
 async function activeSeasonId(db) {
