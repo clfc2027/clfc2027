@@ -3,6 +3,7 @@ const IC_COUNT = window.__INTERCHANGE_COUNT__;
 const HUB_URL = window.__HUB_URL__ || "/";
 const app = document.getElementById("app");
 
+// The hub asks for the coaches PIN before the board opens, so the board itself has no gate.
 let state = {
   grades: [],
   gradeId: "",
@@ -14,15 +15,7 @@ let state = {
   interchange: Array(IC_COUNT).fill(null),
   activeSlot: null, // { type: 'field'|'interchange', slot, index }
   presenting: false,
-  unlocked: false,
-  pin: "",
-  busy: false,
-  gateError: "",
 };
-
-function pinKey(gradeId) {
-  return "coachPin:" + gradeId;
-}
 
 function currentGrade() {
   return state.grades.find((g) => String(g.grade_id) === String(state.gradeId));
@@ -42,12 +35,8 @@ function setStatus(msg, kind) {
   el.className = "status-line" + (kind ? " " + kind : "");
 }
 
-// Every request carries the coach PIN for the grade that is open. The server checks it.
 async function api(path, opts) {
   opts = Object.assign({}, opts || {});
-  const headers = Object.assign({}, opts.headers || {});
-  if (state.pin) headers["x-coach-pin"] = state.pin;
-  opts.headers = headers;
   const res = await fetch(path, opts);
   let data = {};
   try {
@@ -71,47 +60,14 @@ function postJson(path, body) {
   });
 }
 
-// Checks a PIN for the current grade. On success the board opens and the PIN is kept
-// for this browser tab only (sessionStorage), so a reload does not ask again.
-async function unlock(pin, silent) {
-  state.busy = true;
-  state.gateError = "";
-  try {
-    await postJson("/api/coach/verify", { grade_id: state.gradeId, pin: pin });
-    state.pin = pin;
-    state.unlocked = true;
-    sessionStorage.setItem(pinKey(state.gradeId), pin);
-  } catch (e) {
-    state.pin = "";
-    state.unlocked = false;
-    sessionStorage.removeItem(pinKey(state.gradeId));
-    if (!silent) state.gateError = e.message;
-  }
-  state.busy = false;
-}
-
-function lockBoard() {
-  sessionStorage.removeItem(pinKey(state.gradeId));
-  state.unlocked = false;
-  state.pin = "";
-  state.gateError = "";
-  state.positions = {};
-  state.interchange = Array(IC_COUNT).fill(null);
-}
-
-// Called whenever the grade changes: clears the board and tries the PIN saved in this tab.
-async function prepareGrade() {
+// Clears the board when the grade changes.
+function resetBoard() {
   state.positions = {};
   state.interchange = Array(IC_COUNT).fill(null);
   state.round = "";
   state.opponent = "";
   state.matchDate = "";
   state.venue = "";
-  state.unlocked = false;
-  state.pin = "";
-  state.gateError = "";
-  const stored = sessionStorage.getItem(pinKey(state.gradeId));
-  if (stored) await unlock(stored, true);
 }
 
 async function init() {
@@ -119,30 +75,11 @@ async function init() {
   try {
     const { grades } = await api("/api/grades");
     state.grades = grades;
-    if (grades.length) {
-      state.gradeId = String(grades[0].grade_id);
-      await prepareGrade();
-    }
+    if (grades.length) state.gradeId = String(grades[0].grade_id);
   } catch (e) {
-    state.gateError = "Could not load grades: " + e.message;
+    setStatus("Could not load boards: " + e.message, "err");
   }
   render();
-}
-
-function gateHtml(grade) {
-  const disabled = !grade || state.busy ? " disabled" : "";
-  const label = grade ? grade.grade_name : "No boards yet";
-  return \`
-    <div class="gate-card">
-      <div class="club">COACHES ONLY</div>
-      <h3>\${escapeHtml(label)}</h3>
-      <p>Enter the 4-digit coach PIN to open this board.</p>
-      <form id="gateForm" class="gate-form">
-        <input id="gatePin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off"\${disabled}>
-        <button class="btn-primary" type="submit"\${disabled}>\${state.busy ? "Checking…" : "Unlock"}</button>
-      </form>
-      <div class="gate-error">\${escapeHtml(state.gateError)}</div>
-    </div>\`;
 }
 
 function render() {
@@ -177,7 +114,6 @@ function render() {
             : '<option value="">No boards yet</option>'}
         </select>
       </div>
-      \${state.unlocked ? \`
       <div class="field round-list-wrap">
         <label>Round</label>
         <input id="roundInput" placeholder="e.g. Round 7" value="\${escapeAttr(state.round)}" autocomplete="off">
@@ -194,12 +130,10 @@ function render() {
       <div class="action-buttons action-buttons-wrap">
         <button class="btn-ghost" id="loadBtn">Load</button>
         <button class="btn-ghost" id="clearBtn">Clear</button>
-        <button class="btn-ghost" id="lockBtn">Lock</button>
         <button class="btn-primary" id="saveBtn">Save Team</button>
-      </div>\` : ""}
+      </div>
     </div>
 
-    \${state.unlocked ? \`
     <div class="team-banner">
       <div class="club">COCKBURN LAKES FOOTBALL CLUB</div>
       <div class="grade">\${grade ? grade.grade_name : "SELECT A GRADE"}</div>
@@ -240,7 +174,7 @@ function render() {
         <div class="selector-results" id="selectorResults"></div>
         <button class="selector-close" id="selectorClose">Cancel</button>
       </div>
-    </div>\` : gateHtml(grade)}
+    </div>
   \`;
 
   bindEvents();
@@ -254,29 +188,12 @@ function bindEvents() {
 
   const gradeSelect = document.getElementById("gradeSelect");
   if (gradeSelect) {
-    gradeSelect.onchange = async (e) => {
+    gradeSelect.onchange = (e) => {
       state.gradeId = e.target.value;
-      await prepareGrade();
+      resetBoard();
       render();
     };
   }
-
-  const gateForm = document.getElementById("gateForm");
-  if (gateForm) {
-    gateForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const pin = document.getElementById("gatePin").value.trim();
-      if (!/^\\d{4}$/.test(pin)) {
-        state.gateError = "Enter the 4-digit PIN.";
-        render();
-        return;
-      }
-      await unlock(pin, false);
-      render();
-    };
-  }
-
-  if (!state.unlocked) return;
 
   const roundInput = document.getElementById("roundInput");
   if (roundInput) {
@@ -304,12 +221,6 @@ function bindEvents() {
     if (!confirm("Clear the board? Unsaved changes will be lost.")) return;
     state.positions = {};
     state.interchange = Array(IC_COUNT).fill(null);
-    render();
-  };
-
-  const lockBtn = document.getElementById("lockBtn");
-  if (lockBtn) lockBtn.onclick = () => {
-    lockBoard();
     render();
   };
 
@@ -535,7 +446,6 @@ async function saveSelection() {
     setStatus("Save failed: " + e.message, "err");
   }
 }
-
 
 init();
 `;
