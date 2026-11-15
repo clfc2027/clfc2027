@@ -52,7 +52,7 @@ if (intro && introVideo) {
   const form = document.getElementById('dutyCheckForm');
   const result = document.getElementById('dutyCheckResult');
   if (!form || !result) return;
-  const API = 'https://coaches-board.clfc2027.workers.dev/api/duties/check';
+  const API = 'https://cockburnlakes.com/coaches/api/duties/check';
 
   // "Reserves", "Reserves and Thirds", "Colts, Reserves and Thirds"
   function joinNames(list) {
