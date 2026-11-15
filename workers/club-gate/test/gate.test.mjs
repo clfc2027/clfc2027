@@ -41,11 +41,14 @@ function newEnv() {
   };
 }
 
-function req(path, { method = "GET", body, cookie, ip } = {}) {
+function req(path, { method = "GET", form, cookie, ip } = {}) {
   const headers = { "CF-Connecting-IP": ip || `10.1.0.${++ipN}` };
   if (cookie) headers.Cookie = cookie;
   const init = { method, headers };
-  if (body !== undefined) { headers["Content-Type"] = "application/json"; init.body = JSON.stringify(body); }
+  if (form) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    init.body = new URLSearchParams(form).toString();
+  }
   return new Request("https://cockburnlakes.com" + path, init);
 }
 
@@ -53,7 +56,7 @@ async function signedInCookie() {
   return `clfc_session=${await makeSessionToken(SECRET)}`;
 }
 
-test("signed-out visitors get the PIN page with the request-PIN link, on every path", async () => {
+test("signed-out visitors get the PIN page with the request-PIN button, on every path", async () => {
   const { env } = newEnv();
   for (const p of ["/", "/fines", "/league", "/app.js"]) {
     const r = await worker.fetch(req(p), env);
@@ -61,7 +64,16 @@ test("signed-out visitors get the PIN page with the request-PIN link, on every p
     const html = await r.text();
     assert.match(html, /Members only/);
     assert.match(html, /sms:\+61451612744\?body=CLFC%20pin%20request%20-%20/);
+    assert.match(html, /Request your PIN with your name/);
   }
+});
+
+test("sign-in form posts the PIN to /gate/login without a script", async () => {
+  const { env } = newEnv();
+  const html = await (await worker.fetch(req("/"), env)).text();
+  assert.match(html, /<form id="form" method="post" action="\/gate\/login"/);
+  assert.match(html, /<input id="pin" name="pin"/);
+  assert.doesNotMatch(html, /<script>/);
 });
 
 test("signed-out API calls get JSON, not the page", async () => {
@@ -71,27 +83,48 @@ test("signed-out API calls get JSON, not the page", async () => {
   assert.equal((await r.json()).ok, false);
 });
 
-test("wrong PIN is refused and five misses lock that IP", async () => {
+test("wrong PIN is refused on the page and five misses lock that IP", async () => {
   const { env } = newEnv();
   const ip = "192.0.2.77";
   for (let i = 0; i < 5; i++) {
-    const r = await worker.fetch(req("/gate/login", { method: "POST", body: { pin: "9999" }, ip }), env);
+    const r = await worker.fetch(req("/gate/login", { method: "POST", form: { pin: "9999" }, ip }), env);
     assert.equal(r.status, 401);
+    assert.match(await r.text(), /PIN not recognised/);
   }
-  const locked = await worker.fetch(req("/gate/login", { method: "POST", body: { pin: "1111" }, ip }), env);
+  const locked = await worker.fetch(req("/gate/login", { method: "POST", form: { pin: "1111" }, ip }), env);
   assert.equal(locked.status, 429);
+  assert.match(await locked.text(), /Too many wrong PINs/);
 });
 
-test("correct PIN sets a secure, HttpOnly, 30-day cookie", async () => {
+test("correct PIN sets a secure 30-day cookie and redirects to the welcome page", async () => {
   const { env } = newEnv();
-  const r = await worker.fetch(req("/gate/login", { method: "POST", body: { pin: "1111" } }), env);
-  assert.equal(r.status, 200);
+  const r = await worker.fetch(req("/gate/login", { method: "POST", form: { pin: "1111" } }), env);
+  assert.equal(r.status, 303);
+  assert.equal(r.headers.get("Location"), "/gate/welcome");
   const cookie = r.headers.get("Set-Cookie");
   assert.match(cookie, /^clfc_session=/);
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /Secure/);
   assert.match(cookie, /SameSite=Lax/);
   assert.match(cookie, /Max-Age=2592000/);
+});
+
+test("the cookie from a correct PIN lets the member straight into the hub", async () => {
+  const { env } = newEnv();
+  const login = await worker.fetch(req("/gate/login", { method: "POST", form: { pin: "1111" } }), env);
+  const cookie = login.headers.get("Set-Cookie").split(";")[0];
+  const r = await worker.fetch(req("/", { cookie }), env);
+  assert.equal(r.status, 200);
+  assert.equal(await r.text(), "HUB:/");
+});
+
+test("welcome page is public and sends the member on to the hub", async () => {
+  const { env } = newEnv();
+  const r = await worker.fetch(req("/gate/welcome"), env);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /You are in/);
+  assert.match(html, /content="2;url=\/"/);
 });
 
 test("signed-in members reach each tool through the right service", async () => {
@@ -161,11 +194,4 @@ test("confirmation image is public and served as a JPEG", async () => {
   const bytes = new Uint8Array(await r.arrayBuffer());
   assert.equal(bytes[0], 0xff);
   assert.equal(bytes[1], 0xd8);
-});
-
-test("the sign-in page script parses, so the PIN form works", async () => {
-  const { env } = newEnv();
-  const html = await (await worker.fetch(req("/"), env)).text();
-  const script = html.split("<script>")[1].split("</script>")[0];
-  assert.doesNotThrow(() => new Function(script));
 });

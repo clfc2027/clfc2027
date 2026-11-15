@@ -118,49 +118,15 @@ export function gatePage(message = "") {
   <img class="hero" src="/gate/hero.jpg?v=2" alt="Cockburn Lakes FC">
   <h1>Members only</h1>
   <p>Enter your 4-digit PIN to open the club hub.</p>
-  <form id="form" autocomplete="off">
+  <form id="form" method="post" action="/gate/login" autocomplete="off">
     <label for="pin">Your PIN</label>
-    <input id="pin" type="tel" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+    <input id="pin" name="pin" type="tel" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
     <button id="submit" type="submit">Enter</button>
     <div class="msg" id="msg" role="status">${message}</div>
   </form>
   <p class="request-hint">Don't have a PIN yet?</p>
   <a class="request-btn" href="${PIN_REQUEST_SMS}">Request your PIN with your name</a>
 </main>
-<script>
-(function () {
-  var form = document.getElementById("form");
-  var msg = document.getElementById("msg");
-  var btn = document.getElementById("submit");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    msg.textContent = "";
-    var pin = document.getElementById("pin").value.replace(/[^0-9]/g, "");
-    if (!/^[0-9]{4}$/.test(pin)) { msg.textContent = "Enter your 4-digit PIN."; return; }
-    btn.disabled = true;
-    fetch("/gate/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pin }),
-      credentials: "same-origin"
-    })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (res.ok && res.d.ok) {
-          document.querySelector("main.card").innerHTML = '<img class="hero" src="/gate/confirm.jpg?v=1" alt=""><h1>You are in</h1><p>Opening the club hub...</p>';
-          setTimeout(function () { location.reload(); }, 2000);
-          return;
-        }
-        msg.textContent = res.d.error || "Something went wrong. Try again.";
-        btn.disabled = false;
-      })
-      .catch(function () {
-        msg.textContent = "Could not reach the club hub. Try again.";
-        btn.disabled = false;
-      });
-  });
-})();
-</script>
 </body>
 </html>`;
 }
@@ -197,21 +163,59 @@ async function ensureSchema(flexi) {
     .run();
 }
 
+function gateResponse(message, status) {
+  return new Response(gatePage(message), {
+    status,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+  });
+}
+
+export function welcomePage() {
+  return `<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="refresh" content="2;url=/">
+<title>Welcome | Cockburn Lakes FC</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #14213d; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; box-sizing: border-box; }
+  .card { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 360px; text-align: center; color: #1d1d1f; }
+  .hero { display: block; width: 100%; height: auto; border-radius: 8px; margin-bottom: 14px; }
+  h1 { margin: 0 0 6px; font-size: 1.3rem; color: #14213d; }
+  p { margin: 0; color: #5b6270; }
+</style>
+</head>
+<body>
+<main class="card">
+  <img class="hero" src="/gate/confirm.jpg?v=1" alt="">
+  <h1>You are in</h1>
+  <p>Opening the club hub...</p>
+</main>
+</body>
+</html>`;
+}
+
 async function login(request, env) {
-  const body = await request.json().catch(() => ({}));
-  const pin = typeof body.pin === "string" ? body.pin.trim() : "";
-  if (!/^\d{4}$/.test(pin)) return json({ ok: false, error: "Enter your 4-digit PIN." }, 400);
+  const form = await request.formData().catch(() => null);
+  const raw = form ? form.get("pin") : null;
+  const pin = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d{4}$/.test(pin)) return gateResponse("Enter your 4-digit PIN.", 400);
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   await ensureSchema(env.FLEXI);
   await assertNotLocked(env.FLEXI, ip);
   const member = await env.DB.prepare(`SELECT id FROM member_directory WHERE pin = ?1`).bind(pin).first();
   if (!member) {
     await recordFailure(env.FLEXI, ip);
-    return json({ ok: false, error: "PIN not recognised. Request your PIN below if you don't have one." }, 401);
+    return gateResponse("PIN not recognised. Request your PIN below if you don't have one.", 401);
   }
   await env.FLEXI.prepare(`DELETE FROM gate_pin_attempts WHERE ip = ?1`).bind(ip).run();
   const token = await makeSessionToken(env.SESSION_SECRET);
-  return json({ ok: true }, 200, { "Set-Cookie": sessionCookie(token, SESSION_MS / 1000) });
+  return new Response(null, {
+    status: 303,
+    headers: { Location: "/gate/welcome", "Set-Cookie": sessionCookie(token, SESSION_MS / 1000), "Cache-Control": "no-store" },
+  });
 }
 
 export default {
@@ -236,8 +240,13 @@ export default {
       try {
         return await login(request, env);
       } catch (err) {
-        return json({ ok: false, error: err.message || "Server error" }, err.status || 500);
+        return gateResponse(err.message || "Server error", err.status || 500);
       }
+    }
+    if (path === "/gate/welcome") {
+      return new Response(welcomePage(), {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+      });
     }
     if (path === "/gate/logout" && request.method === "POST") {
       return json({ ok: true }, 200, { "Set-Cookie": sessionCookie("", 0) });
