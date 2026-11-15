@@ -73,7 +73,7 @@
               </article>
               <article class="feature-card feature-compact">
                 <div class="compact-row"><div class="feature-icon">▦</div><div><h3>Coaches Board</h3></div></div>
-                <a class="text-link js-coach-pin" href="https://coaches-board.clfc2027.workers.dev/">Open Coaches Board <span>↗</span></a>
+                <a class="text-link" href="https://coaches-board.clfc2027.workers.dev/">Open Coaches Board <span>↗</span></a>
               </article>
             </div>
             <div class="feature-stack feature-stack-single">
@@ -137,19 +137,6 @@
       </form>
     </dialog>
 
-    <dialog id="coach-dialog" class="pin-dialog" aria-labelledby="coach-title">
-      <form id="coach-form">
-        <p class="kicker">COACHES ONLY</p>
-        <h2 id="coach-title">Enter coach PIN</h2>
-        <input id="coach-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="4 digit coach PIN" />
-        <p class="pin-error" id="coach-error" hidden>Incorrect PIN</p>
-        <div class="pin-actions">
-          <button type="button" class="button button-ghost" id="coach-cancel">Cancel</button>
-          <button type="submit" class="button button-primary">Enter <span>↗</span></button>
-        </div>
-      </form>
-    </dialog>
-
     <style>
       .access-msg{line-height:1.5;margin:0}
       .access-msg a{color:#ffd400;text-decoration:none}
@@ -203,38 +190,6 @@
           });
         });
 
-        // Coaches Board PIN gate
-        var COACH_PIN = "0000";
-        var coachDialog = document.getElementById("coach-dialog");
-        var coachForm = document.getElementById("coach-form");
-        var coachInput = document.getElementById("coach-pin");
-        var coachError = document.getElementById("coach-error");
-        var coachTarget = "";
-        document.querySelectorAll(".js-coach-pin").forEach(function (link) {
-          link.addEventListener("click", function (e) {
-            e.preventDefault();
-            coachTarget = link.href;
-            coachInput.value = "";
-            coachError.hidden = true;
-            coachDialog.showModal();
-            coachInput.focus();
-          });
-        });
-        coachForm.addEventListener("submit", function (e) {
-          e.preventDefault();
-          if (coachInput.value === COACH_PIN) {
-            coachDialog.close();
-            window.location.href = coachTarget;
-          } else {
-            coachError.hidden = false;
-            coachInput.value = "";
-            coachDialog.classList.remove("shake");
-            void coachDialog.offsetWidth;
-            coachDialog.classList.add("shake");
-            coachInput.focus();
-          }
-        });
-        document.getElementById("coach-cancel").addEventListener("click", function () { coachDialog.close(); });
       })();
     </script>
 
