@@ -162,3 +162,10 @@ test("confirmation image is public and served as a JPEG", async () => {
   assert.equal(bytes[0], 0xff);
   assert.equal(bytes[1], 0xd8);
 });
+
+test("the sign-in page script parses, so the PIN form works", async () => {
+  const { env } = newEnv();
+  const html = await (await worker.fetch(req("/"), env)).text();
+  const script = html.split("<script>")[1].split("</script>")[0];
+  assert.doesNotThrow(() => new Function(script));
+});
