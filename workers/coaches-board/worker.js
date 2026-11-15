@@ -430,27 +430,48 @@ async function checkDutiesByPin(request, env) {
   await flexi.prepare(`DELETE FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).run();
 
   const name = (member.first_name + " " + member.last_name).trim();
-  const latest = await latestDutyRound(flexi);
-  if (!latest) return { ok: true, name, round: null, venue: null, duties: [] };
-
-  const round = latest.round_name;
-  const type = await flexi.prepare(
-    `SELECT venue_type FROM game_day_round_type WHERE season_year = ?1 AND round_name = ?2`
-  ).bind(DUTY_SEASON_PUBLIC, round).first();
-  const { results } = await flexi.prepare(
-    `SELECT grade, task_key FROM game_day_allocations
-      WHERE season_year = ?1 AND round_name = ?2 AND member_id = ?3
-      ORDER BY grade, task_key, slot`
-  ).bind(DUTY_SEASON_PUBLIC, round, member.id).all();
   const gradeLabel = {};
   DUTY_PUBLIC_GRADES.forEach((g) => { gradeLabel[g.key] = g.label; });
   const taskLabel = {};
   DUTY_PUBLIC_TASKS.forEach((t) => { taskLabel[t.key] = t.label; });
-  const duties = results.map((r) => ({
-    grade: gradeLabel[r.grade] || r.grade,
-    duty: taskLabel[r.task_key] || r.task_key
-  }));
-  return { ok: true, name, round, venue: type ? type.venue_type : null, duties };
+
+  // Named grades: the newest team sheet on the board is "this week", whether or not duties are out.
+  let named = [];
+  let teamRound = null;
+  try {
+    const teamRow = await flexi.prepare(
+      `SELECT round_name FROM board_selections ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
+    ).first();
+    teamRound = teamRow ? teamRow.round_name : null;
+    if (teamRound) {
+      const { results: boardRows } = await flexi.prepare(
+        `SELECT DISTINCT s.grade_id FROM board_selection_players p
+           JOIN board_selections s ON s.id = p.selection_id
+          WHERE s.round_name = ?1 AND p.member_id = ?2`
+      ).bind(teamRound, member.id).all();
+      const ids = boardRows.map((r) => r.grade_id);
+      named = DUTY_PUBLIC_GRADES.filter((g) => ids.includes(g.key)).map((g) => g.label);
+    }
+  } catch (e) {
+    if (!/no such table/i.test(e.message)) throw e;
+  }
+
+  // Duties are shown once they are allocated for the newest round with duties.
+  const latest = await latestDutyRound(flexi);
+  const dutiesOut = !!latest;
+  let duties = [];
+  if (dutiesOut) {
+    const { results } = await flexi.prepare(
+      `SELECT grade, task_key FROM game_day_allocations
+        WHERE season_year = ?1 AND round_name = ?2 AND member_id = ?3
+        ORDER BY grade, task_key, slot`
+    ).bind(DUTY_SEASON_PUBLIC, latest.round_name, member.id).all();
+    duties = results.map((r) => ({
+      grade: gradeLabel[r.grade] || r.grade,
+      duty: taskLabel[r.task_key] || r.task_key
+    }));
+  }
+  return { ok: true, name, round: teamRound, named, dutiesOut, duties };
 }
 
 // Display rule: the surname only. If two or more players on the same board share a surname,

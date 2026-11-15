@@ -54,6 +54,12 @@ if (intro && introVideo) {
   if (!form || !result) return;
   const API = 'https://coaches-board.clfc2027.workers.dev/api/duties/check';
 
+  // "Reserves", "Reserves and Thirds", "Colts, Reserves and Thirds"
+  function joinNames(list) {
+    if (list.length < 2) return list.join('');
+    return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+  }
+
   function show(message, isError) {
     result.innerHTML = '';
     result.className = 'duty-check-result' + (isError ? ' err' : '');
@@ -82,20 +88,32 @@ if (intro && introVideo) {
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok) return show(data.error || 'Could not check right now. Try again shortly.', true);
 
-      const venue = data.venue === 'home' ? ' (home)' : data.venue === 'away' ? ' (away)' : '';
       const first = (data.name || '').split(' ')[0];
-      if (!data.round) return show('Hi ' + first + ', no game day duties have been allocated yet.', false);
-      if (!data.duties.length) {
-        return show('Hi ' + first + ', you are not on game day duty in Round ' + data.round + venue + '.', false);
+      const named = data.named || [];
+      const duties = data.duties || [];
+      // Nobody named and no duty: keep showing up.
+      if (!named.length && !duties.length) {
+        return show('Hello ' + first + ', all you can do is keep showing up. See you on the track Tuesday.', false);
       }
-      const p = show('Hi ' + first + ', you are on game day duty in Round ' + data.round + venue + ':', false);
-      const list = document.createElement('ul');
-      data.duties.forEach(function (d) {
-        const li = document.createElement('li');
-        li.textContent = d.grade + ' · ' + d.duty;
-        list.appendChild(li);
-      });
-      result.appendChild(list);
+      const namedList = joinNames(named);
+      const dutyText = duties.map(function (d) {
+        return 'you are on ' + d.duty.toLowerCase() + ' duty for the ' + d.grade + ' game';
+      }).join(' and ');
+      const findSomeone = " If you can't do this job, find someone to do it for you.";
+      // Named and on duty.
+      if (named.length && duties.length) {
+        return show('Hello ' + first + ', this week you are playing ' + namedList + ' and ' + dutyText + '.' + findSomeone, false);
+      }
+      // On duty but not named (should be rare).
+      if (duties.length) {
+        return show('Hello ' + first + ', this week ' + dutyText + '.' + findSomeone, false);
+      }
+      // Named, duties not yet allocated.
+      if (!data.dutiesOut) {
+        return show('Hello ' + first + '. You are named in ' + namedList + ' this week. Game day duties haven\'t been allocated yet.', false);
+      }
+      // Named, allocated, no duty.
+      return show('Hello ' + first + '. You are named in ' + namedList + ' this week. You don\'t have any game day duties this week.', false);
     } catch (err) {
       show('Could not check right now. Try again shortly.', true);
     }
