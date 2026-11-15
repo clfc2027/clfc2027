@@ -56,6 +56,22 @@
           <div class="intro-label">THE 2027<br /><strong>PLAYERS HUB</strong></div>
         </section>
 
+        <section class="section duty-check" id="duty-check" aria-labelledby="duty-check-title">
+          <div class="section-heading section-heading-tight">
+            <div>
+              <p class="kicker">Game day</p>
+              <h2 id="duty-check-title">Check your <span>duty</span></h2>
+            </div>
+            <p class="section-intro">Enter your 4-digit PIN to see if you are on game day duty for the latest round and what your job is.</p>
+          </div>
+          <form class="duty-check-form" id="dutyCheckForm" autocomplete="off">
+            <label class="duty-check-label" for="dutyPin">Your PIN</label>
+            <input id="dutyPin" class="duty-check-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required placeholder="0000" />
+            <button class="button button-primary" type="submit">Check <span>&rarr;</span></button>
+          </form>
+          <div class="duty-check-result" id="dutyCheckResult" aria-live="polite"></div>
+        </section>
+
         <section class="section section-features" id="features" aria-label="Club tools">
           <div class="feature-layout">
             <article class="feature-card feature-featured">
