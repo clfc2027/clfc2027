@@ -119,3 +119,16 @@ if (intro && introVideo) {
     }
   });
 })();
+
+// Weekly fines total on the hub card. Read from the fines Worker when the page loads.
+(function () {
+  var el = document.getElementById("fines-total");
+  if (!el) return;
+  fetch("https://weekly-fines.clfc2027.workers.dev/api/fines", { cache: "no-store" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) throw new Error(d.error || "fines unavailable");
+      el.textContent = "$" + (d.total_cents / 100).toFixed(d.total_cents % 100 ? 2 : 0);
+    })
+    .catch(function () { el.textContent = "unavailable"; });
+})();

@@ -201,6 +201,13 @@ test("admin paid/reopen/delete refuse a wrong passcode", async () => {
   assert.equal((await publicList(env)).total_cents, 200);
 });
 
+test("public fines list allows cross-origin reads from the hub", async () => {
+  const env = newEnv();
+  const res = await call(env, "GET", "/api/fines");
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.equal((await res.json()).total_cents, 0);
+});
+
 test("public and admin pages are served by the Worker", async () => {
   const env = newEnv();
   const home = await call(env, "GET", "/");
