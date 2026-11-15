@@ -217,6 +217,48 @@ async function getGrades(db) {
   return { grades: results };
 }
 
+// Club team names on PlayHQ, used to find each grade's team in the latest season.
+var BOARD_TEAM_NAMES = {
+  league: "Cockburn Lakes (B)",
+  reserves: "Cockburn Lakes (BR)",
+  colts: "Cockburn Lakes (DBC)",
+  thirds: "Cockburn Lakes (E2S)"
+};
+// PlayHQ round names become the board's round numbers: "Round 8" -> "8", "Finals Round 1" -> "Finals 1".
+function boardRoundName(raw) {
+  return String(raw || "").trim().replace(/^Round\s+/i, "");
+}
+// The season's fixtures for this grade, as written by the admin's PlayHQ sync (teams, seasons and fixtures tables).
+async function getSeasonRounds(db, gradeId) {
+  const teamName = BOARD_TEAM_NAMES[gradeId];
+  if (!teamName) return [];
+  try {
+    const { results } = await db.prepare(
+      `SELECT f.round_name, f.opponent_name, f.game_date, f.venue_name
+         FROM fixtures f
+         JOIN teams t ON t.id = f.team_id
+         JOIN seasons s ON s.id = t.season_id
+        WHERE t.team_name = ?1 AND s.season_year = (SELECT MAX(season_year) FROM seasons)
+        ORDER BY f.game_date ASC`
+    ).bind(teamName).all();
+    return results.map((r) => ({
+      round_name: boardRoundName(r.round_name),
+      opponent_name: r.opponent_name || null,
+      match_date: r.game_date || null,
+      venue_name: String(r.venue_name || "").trim() || null
+    }));
+  } catch (e) {
+    if (/no such (table|column)/i.test(e.message)) return [];
+    throw e;
+  }
+}
+// Season fixtures when the admin sync has them; otherwise the rounds already saved on this board.
+async function getRounds(db, flexi, gradeId) {
+  const season = await getSeasonRounds(db, gradeId);
+  if (season.length) return { rounds: season, source: "season" };
+  return getSavedRounds(flexi, gradeId);
+}
+
 // Round names already used on this grade's board, so a coach can reuse a round's opponent and ground.
 async function getSavedRounds(db, gradeId) {
   const { results } = await db.prepare(
@@ -769,7 +811,7 @@ var worker_default = {
       if (pathname === "/api/rounds" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");
         await requireCoach(request, env, gradeId);
-        return json(await getSavedRounds(env.FLEXI, gradeId));
+        return json(await getRounds(env.DB, env.FLEXI, gradeId));
       }
       if (pathname === "/api/team" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");

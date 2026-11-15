@@ -144,6 +144,7 @@ async function init() {
   } catch (e) {
     state.gateError = "Could not load boards: " + e.message;
   }
+  if (state.unlocked) await autoPickRound();
   render();
 }
 
@@ -289,6 +290,7 @@ function bindEvents() {
         return;
       }
       await unlock(pin, false);
+      await autoPickRound();
       render();
     };
   }
@@ -300,8 +302,9 @@ function bindEvents() {
     gradeSelect.onchange = (e) => {
       state.gradeId = e.target.value;
       resetBoard();
+      render();
+      autoPickRound();
       if (state.cmp.on) cmpLoadRounds();
-      else render();
     };
   }
 
@@ -726,6 +729,34 @@ async function runPlayerSearch(q) {
   } catch (e) {
     box.innerHTML = '<div class="empty">Search failed: ' + escapeHtml(e.message) + "</div>";
   }
+}
+
+// Picks the next game for the selected grade from the season fixtures, and loads any team already saved for it.
+async function autoPickRound() {
+  if (!state.unlocked || !state.gradeId) return;
+  const gradeAtStart = state.gradeId;
+  try {
+    const { rounds } = await api("/api/rounds?grade_id=" + encodeURIComponent(gradeAtStart));
+    if (!rounds || !rounds.length || state.gradeId !== gradeAtStart) return;
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Perth" });
+    const next = rounds.find((r) => (r.match_date || "").slice(0, 10) >= today) || rounds[rounds.length - 1];
+    state.round = next.round_name;
+    state.opponent = next.opponent_name || "";
+    state.matchDate = (next.match_date || "").slice(0, 10);
+    state.venue = next.venue_name || "";
+    const data = await api("/api/team?grade_id=" + encodeURIComponent(gradeAtStart) + "&round=" + encodeURIComponent(state.round));
+    if (state.gradeId !== gradeAtStart) return;
+    if (data.selection) {
+      state.opponent = data.selection.opponent_name || state.opponent;
+      state.matchDate = (data.selection.match_date || state.matchDate).slice(0, 10);
+      state.venue = data.selection.venue_name || state.venue;
+      state.positions = data.positions || {};
+      state.interchange = Array(IC_COUNT).fill(null).map((_, i) => data.interchange[i] || null);
+    }
+  } catch (e) {
+    // silent: the coach can still choose the round by hand
+  }
+  render();
 }
 
 async function loadRoundSuggestions() {
