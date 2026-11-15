@@ -36,6 +36,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
   .msg { margin-top: 12px; font-weight: 600; }
   .msg.ok { color: #067647; }
   .msg.err { color: var(--red); }
+  .admin-btn { display: inline-block; margin-top: 10px; color: #fff; border: 1px solid #fff; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: .9rem; }
   .rules { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
 </style>
 </head>
@@ -43,6 +44,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
 <header>
   <h1>Weekly Fines</h1>
   <p>Cockburn Lakes FC. Each fine is $2. Nominations are anonymous.</p>
+  <a class="admin-btn" href="/admin">Admin</a>
 </header>
 <main>
   <section>
