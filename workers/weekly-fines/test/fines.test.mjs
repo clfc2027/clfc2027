@@ -48,7 +48,6 @@ function newEnv({ passcode = "letmein" } = {}) {
   const env = {
     DB: makeD1(dbMembers),
     FLEXI: makeD1(new DatabaseSync(":memory:")),
-    ASSETS: { fetch: async () => new Response("<html>page</html>", { status: 200 }) },
   };
   if (passcode) env.ADMIN_PASSCODE = passcode;
   return env;
@@ -200,6 +199,17 @@ test("admin paid/reopen/delete refuse a wrong passcode", async () => {
   const res = await call(env, "POST", "/api/admin/fines/1/paid", { adminPin: "wrong" });
   assert.equal(res.status, 401);
   assert.equal((await publicList(env)).total_cents, 200);
+});
+
+test("public and admin pages are served by the Worker", async () => {
+  const env = newEnv();
+  const home = await call(env, "GET", "/");
+  assert.equal(home.status, 200);
+  assert.match(home.headers.get("content-type"), /text\/html/);
+  assert.match(await home.text(), /Nominate someone/);
+  const admin = await call(env, "GET", "/admin");
+  assert.equal(admin.status, 200);
+  assert.match(await admin.text(), /Weekly Fines admin/);
 });
 
 test("perthWeekStart uses Monday start in Perth time", () => {

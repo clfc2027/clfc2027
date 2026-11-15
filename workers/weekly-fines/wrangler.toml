@@ -15,9 +15,4 @@ binding = "FLEXI"
 database_name = "clfc2026-flexi"
 database_id = "59096bce-7645-4f7b-a757-04290b67b063"
 
-[assets]
-directory = "./public"
-binding = "ASSETS"
-run_worker_first = true
-
 # Secret set in the dashboard, not in this file: ADMIN_PASSCODE

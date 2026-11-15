@@ -2,7 +2,6 @@
 //
 // D1 binding DB    -> playhq-warriors (member_directory, read only: PIN check)
 // D1 binding FLEXI -> clfc2026-flexi (weekly_fines, fines_pin_attempts; shared with coaches-board)
-// ASSETS           -> ./public (index.html, admin.html)
 // Secret ADMIN_PASSCODE (dashboard, never in the repo)
 //
 // Public:  GET /, GET /admin, GET /api/fines, POST /api/fines
@@ -13,6 +12,7 @@
 // A nominator's identity is stored as playhq_player_id and never returned by any public route.
 
 import { passcodeState } from "../../shared/auth.js";
+import { INDEX_HTML, ADMIN_HTML } from "./pages.js";
 
 export const FINE_CENTS = 200;
 export const MAX_WORDS = 49; // "less than 50 words"
@@ -319,10 +319,8 @@ async function adminChangeFine(env, id, action) {
 
 const ADMIN_ACTION = /^\/api\/admin\/fines\/(\d+)\/(paid|reopen|delete)$/;
 
-async function serveAsset(request, env, path) {
-  const res = await env.ASSETS.fetch(new URL(path, request.url));
-  if (!res.ok) return new Response("Page is missing", { status: 500 });
-  return new Response(request.method === "HEAD" ? null : await res.text(), {
+function page(request, html) {
+  return new Response(request.method === "HEAD" ? null : html, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
   });
 }
@@ -335,10 +333,10 @@ export default {
 
     try {
       if ((method === "GET" || method === "HEAD") && pathname === "/") {
-        return serveAsset(request, env, "/index.html");
+        return page(request, INDEX_HTML);
       }
       if ((method === "GET" || method === "HEAD") && pathname === "/admin") {
-        return serveAsset(request, env, "/admin.html");
+        return page(request, ADMIN_HTML);
       }
 
       if (pathname === "/api/fines" && method === "GET") {
