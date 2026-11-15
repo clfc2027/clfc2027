@@ -3,6 +3,7 @@ const IC_COUNT = window.__INTERCHANGE_COUNT__;
 const HUB_URL = window.__HUB_URL__ || "/";
 const app = document.getElementById("app");
 const PIN_KEY = "coachesBoardPin";
+const CMP_YEAR = window.__COMPARE_YEAR__;
 
 let state = {
   grades: [],
@@ -19,6 +20,7 @@ let state = {
   pin: "",
   busy: false,
   gateError: "",
+  cmp: { on: false, rounds: [], gameId: "", data: null, open: false, loading: false, syncing: false, progress: "", error: "" },
 };
 
 function currentGrade() {
@@ -193,6 +195,8 @@ function render() {
       </div>
     </div>
 
+    \${cmpBarHtml()}
+
     <div class="team-banner">
       <div class="club">COCKBURN LAKES FOOTBALL CLUB</div>
       <div class="grade">\${grade ? grade.grade_name : "SELECT A GRADE"}</div>
@@ -234,6 +238,7 @@ function render() {
         <button class="selector-close" id="selectorClose">Cancel</button>
       </div>
     </div>
+    \${cmpModalHtml()}
   \`;
 
   bindEvents();
@@ -267,7 +272,8 @@ function bindEvents() {
     gradeSelect.onchange = (e) => {
       state.gradeId = e.target.value;
       resetBoard();
-      render();
+      if (state.cmp.on) cmpLoadRounds();
+      else render();
     };
   }
 
@@ -308,6 +314,21 @@ function bindEvents() {
 
   const saveBtn = document.getElementById("saveBtn");
   if (saveBtn) saveBtn.onclick = saveSelection;
+
+  const cmpToggleEl = document.getElementById("cmpToggle");
+  if (cmpToggleEl) cmpToggleEl.onchange = (e) => cmpToggle(e.target.checked);
+  const cmpRoundEl = document.getElementById("cmpRound");
+  if (cmpRoundEl) cmpRoundEl.onchange = (e) => cmpSelectRound(e.target.value);
+  const cmpSyncEl = document.getElementById("cmpSync");
+  if (cmpSyncEl) cmpSyncEl.onclick = () => cmpSelectRound(state.cmp.gameId, true);
+  const cmpReopenEl = document.getElementById("cmpReopen");
+  if (cmpReopenEl) cmpReopenEl.onclick = () => { state.cmp.open = true; render(); };
+  const cmpCloseEl = document.getElementById("cmpClose");
+  if (cmpCloseEl) cmpCloseEl.onclick = () => { state.cmp.open = false; render(); };
+  const cmpResyncEl = document.getElementById("cmpResync");
+  if (cmpResyncEl) cmpResyncEl.onclick = () => cmpSelectRound(state.cmp.gameId, true);
+  const cmpOverlayEl = document.getElementById("cmpOverlay");
+  if (cmpOverlayEl) cmpOverlayEl.onclick = (e) => { if (e.target === cmpOverlayEl) { state.cmp.open = false; render(); } };
 
   document.querySelectorAll(".slot-card").forEach((card) => {
     card.addEventListener("click", () => openSelector(card.dataset.type, card.dataset.slot));
@@ -424,6 +445,217 @@ function escapeHtml(v) {
 
 
 
+// ---------- 2026 compare ----------
+function cmpInitial(name) {
+  const parts = String(name || "").trim().split(/\\s+/);
+  if (parts.length < 2) return name || "";
+  return parts[0][0] + ". " + parts.slice(1).join(" ");
+}
+
+function cmpIsOnBoard(p) {
+  const cards = [...Object.values(state.positions), ...state.interchange].filter(Boolean);
+  const pname = String(p.name || "").trim().toLowerCase();
+  return cards.some((c) =>
+    (p.playhq_player_id && c.playhq_player_id === p.playhq_player_id) ||
+    (pname && String(c.name || "").trim().toLowerCase() === pname)
+  );
+}
+
+function cmpRoundTag(r) {
+  if (r.outcome == null && r.our_score == null) return "";
+  const o = String(r.outcome || "").toUpperCase();
+  const letter = o === "WON" ? "W" : o === "LOST" ? "L" : o.startsWith("DR") ? "D" : "";
+  const score = r.our_score != null && r.opp_score != null ? " " + r.our_score + "–" + r.opp_score : "";
+  return " · " + (letter + score).trim();
+}
+
+function cmpFmtScore(t) {
+  if (!t || t.score == null) return "—";
+  return (t.goals != null && t.behinds != null ? t.goals + "." + t.behinds + " " : "") + "(" + t.score + ")";
+}
+
+// Pre-picks the 2026 round whose opponent matches the opponent typed on this board.
+function cmpRoundForOpponent(rounds) {
+  const opp = (state.opponent || "").trim().toLowerCase();
+  if (!opp) return null;
+  return rounds.find((r) => String(r.opponent_name || "").trim().toLowerCase() === opp) || null;
+}
+
+async function cmpLoadRounds() {
+  const c = state.cmp;
+  c.rounds = [];
+  c.gameId = "";
+  c.data = null;
+  c.open = false;
+  c.error = "";
+  if (!c.on || !state.gradeId) { render(); return; }
+  c.loading = true;
+  render();
+  try {
+    const data = await api("/api/compare/rounds?grade_id=" + encodeURIComponent(state.gradeId));
+    c.rounds = data.rounds || [];
+    const match = cmpRoundForOpponent(c.rounds);
+    c.loading = false;
+    if (match) { await cmpSelectRound(match.game_id); return; }
+  } catch (e) {
+    c.error = "Could not load " + CMP_YEAR + " rounds: " + e.message;
+  }
+  c.loading = false;
+  render();
+}
+
+async function cmpToggle(on) {
+  state.cmp.on = on;
+  if (!on) {
+    state.cmp.rounds = [];
+    state.cmp.gameId = "";
+    state.cmp.data = null;
+    state.cmp.open = false;
+    state.cmp.error = "";
+    render();
+    return;
+  }
+  await cmpLoadRounds();
+}
+
+// Picking a round that has no saved result pulls it from PlayHQ first, then opens the team sheet.
+async function cmpSelectRound(gameId, force) {
+  const c = state.cmp;
+  c.gameId = gameId;
+  c.error = "";
+  c.progress = "";
+  if (!gameId) { c.data = null; c.open = false; render(); return; }
+  const round = c.rounds.find((r) => r.game_id === gameId);
+  const needsSync = !!(force || (round && !round.has_result));
+  c.data = null;
+  c.syncing = needsSync;
+  c.loading = !needsSync;
+  if (needsSync) c.progress = "Pulling " + (round ? round.round_name : "game") + " from PlayHQ…";
+  render();
+  try {
+    if (needsSync) {
+      const res = await postJson("/api/compare/sync-game", { grade_id: state.gradeId, game_id: gameId });
+      if (round) {
+        round.players = res.players;
+        round.has_result = res.has_result;
+        round.no_sheet = res.status === "NO_TEAM_SHEET";
+      }
+    }
+    c.data = await api("/api/compare/sheet?grade_id=" + encodeURIComponent(state.gradeId) + "&game_id=" + encodeURIComponent(gameId));
+    if (round && c.data.result) {
+      round.has_result = 1;
+      round.outcome = c.data.result.outcome;
+      round.our_score = c.data.result.our.score;
+      round.opp_score = c.data.result.opp.score;
+    }
+    c.open = true;
+  } catch (e) {
+    c.error = (needsSync ? "Sync failed: " : "Could not load team sheet: ") + e.message;
+  } finally {
+    c.loading = false;
+    c.syncing = false;
+    c.progress = "";
+    render();
+  }
+}
+
+function cmpBarHtml() {
+  const c = state.cmp;
+  let h = '<div class="compare-bar">' +
+    '<label class="toggle"><input type="checkbox" id="cmpToggle"' + (c.on ? " checked" : "") + '>' +
+    '<span class="track"><span class="knob"></span></span><span class="tlabel">' + CMP_YEAR + ' Season</span></label>';
+  if (!c.on) {
+    return h + '<span class="hint">Switch on to see the ' + CMP_YEAR + ' team and result against this week\\'s opponent.</span></div>';
+  }
+  h += '<div class="field"><label class="flabel">' + CMP_YEAR + ' Round</label><select id="cmpRound"' + (c.rounds.length ? "" : " disabled") + ">" +
+    '<option value="">' + (c.rounds.length ? "Select round…" : "No " + CMP_YEAR + " rounds for this grade") + "</option>" +
+    c.rounds.map((r) =>
+      '<option value="' + escapeAttr(r.game_id) + '"' + (r.game_id === c.gameId ? " selected" : "") + ">" +
+      escapeHtml(r.round_name) + (r.opponent_name ? " — vs " + escapeHtml(r.opponent_name) : "") +
+      cmpRoundTag(r) + "</option>"
+    ).join("") + "</select></div>";
+  if (c.data) h += '<button class="cmp-reopen" id="cmpReopen">View ' + CMP_YEAR + ' Side</button>';
+  if (c.gameId) h += '<button class="cmp-reopen" id="cmpSync"' + (c.syncing ? " disabled" : "") + ">" + (c.syncing ? "Syncing…" : "↻ Re-sync from PlayHQ") + "</button>";
+  if (c.progress) h += '<span class="hint">' + escapeHtml(c.progress) + "</span>";
+  if (c.loading) h += '<span class="hint">Loading…</span>';
+  if (c.error) h += '<span class="hint" style="color:#ff8a93">' + escapeHtml(c.error) + "</span>";
+  return h + "</div>";
+}
+
+function cmpModalHtml() {
+  const c = state.cmp;
+  if (!c.open || !c.data) return "";
+  const g = c.data.game;
+  const listed = c.data.players.filter((p) => !p.emergency);
+  const emergencies = c.data.players.filter((p) => p.emergency);
+  const field = listed.slice(0, POSITIONS.length);
+  const bench = listed.slice(POSITIONS.length);
+  const onBoard = c.data.players.filter(cmpIsOnBoard).length;
+  const meta = [g.round_name, fmtDate(g.game_date), g.venue_name].filter(Boolean).map(escapeHtml).join(" · ");
+
+  const slots = POSITIONS.map((pos, i) => {
+    const p = field[i];
+    const on = p && cmpIsOnBoard(p);
+    const cls = "slot-card cmp" + (p ? "" : " empty") + (on ? " match" : "");
+    const inner = p
+      ? '<div class="jumper">#' + escapeHtml(p.jumper || "-") + '</div><div class="pname">' + escapeHtml(cmpInitial(p.name)) + "</div>"
+      : '<div class="jumper">&nbsp;</div><div class="pname">—</div>';
+    return '<div class="slot" style="left:' + pos.x + "%; top:" + pos.y + '%;"><div class="' + cls + '" data-line="' + pos.line + '">' + inner + "</div></div>";
+  }).join("");
+
+  const row = (p, extra) =>
+    '<div class="ic-row' + (cmpIsOnBoard(p) ? " match" : "") + (extra ? " " + extra : "") + '">' +
+    '<span class="jn">#' + escapeHtml(p.jumper || "-") + "</span><span>" +
+    (p.name ? escapeHtml(p.name) : '<em style="opacity:.6">Name hidden on PlayHQ</em>') +
+    (p.captain ? " (" + escapeHtml(p.captain) + ")" : "") + (p.fill_in ? " · fill-in" : "") + "</span></div>";
+
+  const body = c.data.players.length
+    ? '<div class="board-layout"><div class="oval-wrap">' +
+        '<div class="arc-label top">50</div><div class="arc-label bottom">50</div>' +
+        '<div class="line-label backs">BACKS</div><div class="line-label forwards">FORWARDS</div>' +
+        '<div class="third-line top"></div><div class="third-line bottom"></div>' +
+        '<div class="centre-square"></div><div class="centre-circle"></div>' + slots + "</div>" +
+        '<div class="cmp-side">' +
+          '<div class="panel"><h3>Interchange</h3>' + (bench.length ? bench.map((p) => row(p)).join("") : '<div class="cmp-summary">None listed</div>') + "</div>" +
+          (emergencies.length ? '<div class="panel"><h3>Emergencies</h3>' + emergencies.map((p) => row(p, "emg")).join("") + "</div>" : "") +
+          '<div class="panel cmp-summary">' + c.data.players.length + " players named in " + CMP_YEAR + ". Positions follow jumper order, not where they played.<br><br>" +
+            "<strong>★ " + onBoard + "</strong> of them " + (onBoard === 1 ? "is" : "are") + " on your " + (CMP_YEAR + 1) + " board.</div>" +
+        "</div></div>"
+    : '<div class="cmp-empty">' + (c.data.result ? "PlayHQ has no Cockburn Lakes team sheet for this game." : "No team sheet has been synced for this game yet.") + "</div>";
+
+  const res = c.data.result;
+  const outcome = String((res && res.outcome) || "").toUpperCase();
+  const outCls = outcome === "WON" ? "won" : outcome === "LOST" ? "lost" : outcome ? "draw" : "";
+  const oppName = g.opponent_name || (res && res.opp && res.opp.name) || "Opponent";
+  const versus = res
+    ? '<div class="scoreline">' +
+        '<div class="team us"><div class="tname">Cockburn Lakes</div><div class="tscore">' + escapeHtml(cmpFmtScore(res.our)) + "</div></div>" +
+        '<div class="mid">' + (outcome ? '<span class="outcome ' + outCls + '">' + escapeHtml(outcome) + "</span>" : '<span class="vs">VS</span>') + "</div>" +
+        '<div class="team them"><div class="tname">' + escapeHtml(oppName) + '</div><div class="tscore">' + escapeHtml(cmpFmtScore(res.opp)) + "</div></div>" +
+      "</div>"
+    : '<div class="versus"><span>Cockburn Lakes</span><span class="vs">VS</span><span>' + escapeHtml(oppName) + "</span></div>" +
+      '<div class="cmp-summary" style="margin-top:6px">Result not synced yet. Use Re-sync from PlayHQ.</div>';
+
+  const opp = c.data.opposition || [];
+  const oppPanel = '<div class="opp-panel"><h3>' + escapeHtml(oppName) + (opp.length ? " · " + opp.length + " players" : "") + "</h3>" +
+    (opp.length
+      ? '<div class="opp-grid">' + opp.map((p) =>
+          '<div class="opp-row' + (p.emergency ? " emg" : "") + '"><span class="jn">#' + escapeHtml(p.jumper || "-") + '</span><span class="on">' +
+          (p.name ? escapeHtml(p.name) : '<em style="opacity:.6">Name hidden on PlayHQ</em>') +
+          (p.captain ? " (" + escapeHtml(p.captain) + ")" : "") + (p.emergency ? " · emg" : "") + "</span></div>"
+        ).join("") + "</div>"
+      : '<div class="cmp-summary">PlayHQ has no team sheet for the opposition in this game.</div>') +
+    "</div>";
+
+  return '<div class="cmp-overlay" id="cmpOverlay"><div class="cmp-modal">' +
+    '<button class="cmp-close" id="cmpClose" title="Close">×</button>' +
+    '<button class="cmp-reopen cmp-resync" id="cmpResync"' + (c.syncing ? " disabled" : "") + ">" + (c.syncing ? "Syncing…" : "↻ Re-sync from PlayHQ") + "</button>" +
+    '<div class="cmp-head"><div class="tag">' + CMP_YEAR + ' TEAM SHEET</div>' +
+      '<div class="grade">' + escapeHtml(g.team_name || "") + "</div>" +
+      '<div class="round">' + meta + "</div>" + versus +
+    "</div>" + body + oppPanel + "</div></div>";
+}
+
 async function runPlayerSearch(q) {
   const box = document.getElementById("selectorResults");
   if (!q || q.trim().length < 2) {
@@ -501,6 +733,7 @@ async function loadSelection() {
     state.positions = data.positions || {};
     state.interchange = Array(IC_COUNT).fill(null).map((_, i) => data.interchange[i] || null);
     render();
+    if (state.cmp.on) cmpLoadRounds();
     setStatus("Loaded saved team.", "ok");
   } catch (e) {
     setStatus("Could not load team: " + e.message, "err");
