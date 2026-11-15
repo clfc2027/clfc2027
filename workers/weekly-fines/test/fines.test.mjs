@@ -208,6 +208,17 @@ test("public fines list allows cross-origin reads from the hub", async () => {
   assert.equal((await res.json()).total_cents, 0);
 });
 
+test("everything also works under the /fines path on the club domain", async () => {
+  const env = newEnv();
+  assert.equal((await call(env, "GET", "/fines")).status, 200);
+  assert.equal((await call(env, "GET", "/fines/admin")).status, 200);
+  assert.equal((await nominate(env, "1111", "Sean", "Under the path")).status, 200);
+  const list = await (await call(env, "GET", "/fines/api/fines")).json();
+  assert.equal(list.total_cents, 200);
+  const admin = await (await call(env, "POST", "/fines/api/admin/fines", { adminPin: "letmein" })).json();
+  assert.equal(admin.fines.length, 1);
+});
+
 test("public and admin pages are served by the Worker", async () => {
   const env = newEnv();
   const home = await call(env, "GET", "/");
