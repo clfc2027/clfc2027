@@ -686,11 +686,12 @@ async function saveGameDayRound(flexi, payload) {
         picks.push({ grade, task_key: task.key, slot, member_id: memberId, name: opt.name });
       });
     }
-    const ids = picks.map((p) => p.member_id);
-    if (ids.some((id, i) => ids.indexOf(id) !== i)) {
-      throw httpErr(`A player is on more than one job for ${DUTY_GRADE_LABEL[grade]} this round`, 409);
-    }
     rows.push(...picks);
+  }
+  // Nobody may hold two duties in the same round, across all grades.
+  const roundIds = rows.map((p) => p.member_id);
+  if (roundIds.some((id, i) => roundIds.indexOf(id) !== i)) {
+    throw httpErr("A player is on more than one job this round", 409);
   }
 
   const stmts = [
@@ -1288,9 +1289,10 @@ function randomiseDuties() {
   });
 
   var short = [];
+  // One map for the whole round: nobody gets two duties on the same day, across all grades.
+  var used = {};
   DUTY_GRADES.forEach(function (g) {
     var grade = dutyData.grades[g.key];
-    var used = {};
     var tasks = grade.tasks.filter(function (t) { return t.required && t.options.length; });
     // Fill the scarcest pools first so a small board is not used up by other duties.
     tasks.sort(function (a, b) { return a.options.length - b.options.length; });
