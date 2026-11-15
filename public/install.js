@@ -18,6 +18,7 @@
     background:#ffd400;color:#070b14;font-family:inherit;font-weight:800;font-size:.85rem;line-height:1;letter-spacing:.08em;text-transform:uppercase;
     cursor:pointer;box-shadow:0 6px 20px rgba(255,212,0,.25)}
   .a2hs-btn:hover{filter:brightness(1.08)}
+  .a2hs-btn[hidden]{display:none}
   .a2hs-btn img{width:22px;height:22px;border-radius:6px}
   .a2hs-float{position:fixed;right:16px;bottom:16px;z-index:9999}
   .a2hs-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;
@@ -62,7 +63,7 @@
     showHelp();
   });
 
-  function showHelp() {
+  function showHelp(installNow) {
     const share =
       '<svg class="a2hs-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
     const steps = isIOS
@@ -77,9 +78,40 @@
     m.innerHTML = `<div class="a2hs-card" role="dialog" aria-modal="true">
         <header><img src="/icons/icon-192.png" alt=""><div><h3>Add the Players Hub</h3>
         <small>Open it like an app from your home screen</small></div></header>
-        <ol>${steps}</ol>
-        <button type="button" class="a2hs-btn">Got it</button></div>`;
-    m.addEventListener('click', (e) => { if (e.target === m || e.target.tagName === 'BUTTON') m.remove(); });
+        ${installNow ? '' : `<ol>${steps}</ol>`}
+        <button type="button" class="a2hs-btn" data-act="install" ${installNow ? '' : 'hidden'}>Add to Home Screen</button>
+        <button type="button" class="a2hs-btn" data-act="close">${installNow ? 'Not now' : 'Got it'}</button></div>`;
+    m.addEventListener('click', (e) => {
+      const act = e.target.dataset && e.target.dataset.act;
+      if (act === 'install' && installNow) installNow();
+      if (e.target === m || act) m.remove();
+    });
     document.body.appendChild(m);
+  }
+
+  // ---- open the install card by itself, once per device ----
+  // Browsers only show the native install dialog after a tap, so the card does the
+  // opening: on Android/desktop Chrome it appears when the browser says the app can
+  // be installed, and its button then opens the native dialog; on iPhone/iPad it
+  // shows the Share-menu steps.
+  const SEEN = 'clfc-install-card-seen';
+  function alreadySeen() { try { return localStorage.getItem(SEEN) === '1'; } catch (e) { return false; } }
+  function markSeen() { try { localStorage.setItem(SEEN, '1'); } catch (e) {} }
+
+  function runInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(({ outcome }) => {
+      deferredPrompt = null;
+      if (outcome === 'accepted') btn.remove();
+    });
+  }
+
+  if (!standalone && !alreadySeen()) {
+    // Chrome fires beforeinstallprompt shortly after load if the app is installable.
+    window.addEventListener('beforeinstallprompt', () => setTimeout(() => {
+      if (deferredPrompt && !alreadySeen()) { markSeen(); showHelp(runInstall); }
+    }, 1500));
+    if (isIOS) setTimeout(() => { if (!alreadySeen()) { markSeen(); showHelp(); } }, 1500);
   }
 })();
