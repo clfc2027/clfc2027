@@ -484,7 +484,14 @@ const DUTY_SOURCE_HOME = {
   thirds: { WATER_1H: "reserves", WATER_2H: "reserves", SCOREBOARD: "reserves", JUMPERS: "thirds", CHANGEROOM: "thirds" },
 };
 // Away games: the grade that does this grade's water and jumpers. Its board supplies the names.
-const DUTY_PERFORMER_AWAY = { colts: "league", reserves: "colts", league: "reserves", thirds: "thirds" };
+// Away games: water is done by the grade named here (Colts game: League; Reserves game: Colts;
+// League game: Reserves). Jumpers are always done by the grade playing that game.
+const DUTY_SOURCE_AWAY = {
+  colts: { WATER_1H: "league", WATER_2H: "league", JUMPERS: "colts" },
+  reserves: { WATER_1H: "colts", WATER_2H: "colts", JUMPERS: "reserves" },
+  league: { WATER_1H: "reserves", WATER_2H: "reserves", JUMPERS: "league" },
+  thirds: { WATER_1H: "thirds", WATER_2H: "thirds", JUMPERS: "thirds" },
+};
 // Away duties a grade does not do at all (no names needed).
 const AWAY_SKIP = { thirds: ["WATER_1H", "WATER_2H"] };
 const MSG_NOT_NAMED = "coach not named team";
@@ -578,7 +585,7 @@ function taskRule(venue, gradeKey, taskKey) {
     const skipped = (AWAY_SKIP[gradeKey] || []).indexOf(taskKey) >= 0;
     return {
       required: AWAY_TASK_KEYS.indexOf(taskKey) >= 0 && !skipped,
-      source: DUTY_PERFORMER_AWAY[gradeKey],
+      source: DUTY_SOURCE_AWAY[gradeKey][taskKey],
     };
   }
   return { required: true, source: DUTY_SOURCE_HOME[gradeKey][taskKey] };
