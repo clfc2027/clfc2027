@@ -124,7 +124,7 @@ if (intro && introVideo) {
 (function () {
   var el = document.getElementById("fines-total");
   if (!el) return;
-  fetch("https://weekly-fines.clfc2027.workers.dev/api/fines", { cache: "no-store" })
+  fetch("https://cockburnlakes.com/fines/api/fines", { cache: "no-store" })
     .then(function (r) { return r.json(); })
     .then(function (d) {
       if (!d.ok) throw new Error(d.error || "fines unavailable");
