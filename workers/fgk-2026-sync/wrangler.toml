@@ -1,0 +1,15 @@
+# TEST sync dashboard for the 2026 season. Writes to FLEXI only. Remove after testing.
+name = "fgk-2026-sync"
+main = "worker.js"
+compatibility_date = "2026-08-31"
+
+workers_dev = false
+preview_urls = false
+
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
+# Secrets set on this Worker (npx.cmd wrangler secret put ...), not in this file:
+#   ADMIN_PASSCODE, PLAYHQ_API_KEY

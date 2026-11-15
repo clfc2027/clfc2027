@@ -1,0 +1,23 @@
+# TEST copy of the FGK wheel, reading the 2026 sync from FLEXI. Remove after testing.
+name = "fgk-test"
+main = "worker.js"
+compatibility_date = "2026-08-31"
+
+# Keep off the public internet: this copy serves member PIN lookups.
+workers_dev = false
+preview_urls = false
+
+# Member PIN lookups (member_directory) stay on playhq-warriors, as in production.
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# Teams, fixtures, team sheets, wheel, spins, pot and results come from the 2026 sync in FLEXI.
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
+# Secrets set on this Worker (npx.cmd wrangler secret put ...), not in this file:
+#   ADMIN_PASSCODE
