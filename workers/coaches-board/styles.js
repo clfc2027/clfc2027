@@ -231,4 +231,17 @@ body.presenting .compare-bar { display: none; }
 .gate-form { display: flex; gap: 10px; justify-content: center; align-items: center; }
 .gate-form input { width: 130px; font-size: 24px; letter-spacing: 8px; text-align: center; padding: 8px; }
 .gate-error { min-height: 1.3em; margin-top: 12px; color: #b00020; font-size: 13px; }
+
+/* Look: solid name cards with a white edge, a white pitch boundary and goal posts */
+.oval-wrap { border: 4px solid rgba(255,255,255,.9); }
+.slot-card .jumper { border: 1px solid rgba(255,255,255,.85); border-bottom: 0; border-radius: 4px 4px 0 0; }
+.slot-card .pname { border: 1px solid rgba(255,255,255,.85); border-radius: 0 0 4px 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; box-shadow: 0 3px 8px rgba(0,0,0,.35); }
+.slot-card .pname.solo { border-radius: 4px; }
+.slot-card[data-line="back"] .jumper, .slot-card[data-line="back"] .pname { background: #c8102e; }
+.slot-card[data-line="mid"] .jumper, .slot-card[data-line="mid"] .pname { background: #1f4fb8; }
+.slot-card[data-line="forward"] .jumper, .slot-card[data-line="forward"] .pname { background: #1f8a3f; }
+.slot-card.empty .jumper, .slot-card.empty .pname { border-style: dashed; }
+.goal-posts { position: absolute; left: 50%; width: 42px; height: 40px; margin-left: -21px; pointer-events: none; background: linear-gradient(90deg, #fff 0 3px, transparent 3px 19px, #fff 19px 22px, transparent 22px 39px, #fff 39px 42px); background-repeat: no-repeat; background-size: 100% 100%; }
+.goal-posts.top { top: 1%; }
+.goal-posts.bottom { bottom: 1%; }
 `;
