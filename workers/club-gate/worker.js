@@ -105,8 +105,8 @@ export function gatePage(message = "") {
   button { width: 100%; margin-top: 14px; background: #14213d; color: #fff; border: 0; border-radius: 8px; padding: 12px; font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .5; }
   .msg { min-height: 1.2em; margin-top: 10px; color: #b42318; font-weight: 600; font-size: .95rem; }
-  .request { display: block; text-align: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid #e3e6ec; color: #14213d; font-weight: 600; text-decoration: none; }
-  .request small { display: block; color: #5b6270; font-weight: 400; margin-bottom: 8px; }
+  .request-hint { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid #e3e6ec; text-align: center; }
+  .request-btn { display: block; box-sizing: border-box; width: 100%; margin-top: 10px; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -119,10 +119,8 @@ export function gatePage(message = "") {
     <button id="submit" type="submit">Enter</button>
     <div class="msg" id="msg" role="status">${message}</div>
   </form>
-  <a class="request" href="${PIN_REQUEST_SMS}">
-    <small>Don't have a PIN yet?</small>
-    Request your PIN by text
-  </a>
+  <p class="request-hint">Don't have a PIN yet?</p>
+  <a class="request-btn" href="${PIN_REQUEST_SMS}">Request your PIN with your name</a>
 </main>
 <script>
 (function () {
