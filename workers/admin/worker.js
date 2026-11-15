@@ -947,6 +947,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 </div>
 
 <script>
+const BASE = location.pathname.indexOf('/admin') === 0 ? '/admin' : '';
 // ---------- Passcode handling ----------
 const KEY = 'clfcAdminPass';
 let PASS = '';
@@ -972,7 +973,7 @@ document.getElementById('passInput').focus();
 
 async function tryUnlock(pass) {
 PASS = pass;
-const res = await fetch('/api/auth', { method: 'POST' });
+const res = await fetch(BASE + '/api/auth', { method: 'POST' });
 if (!res.ok) {
 lock(res.status === 401 ? 'Incorrect passcode.' : 'Admin passcode is not set up on the server.');
 return false;
@@ -999,7 +1000,7 @@ let teams = [];
 let members = [];
 
 async function loadTeams() {
-const res = await fetch('/api/teams');
+const res = await fetch(BASE + '/api/teams');
 const data = await res.json();
 teams = data.teams || [];
 document.getElementById('teamSelect').innerHTML = teams.map(t =>
@@ -1008,7 +1009,7 @@ document.getElementById('teamSelect').innerHTML = teams.map(t =>
 }
 
 async function loadMembers() {
-const res = await fetch('/api/members');
+const res = await fetch(BASE + '/api/members');
 const data = await res.json();
 members = data.members || [];
 document.getElementById('memberSelect').innerHTML = members.map(m =>
@@ -1063,7 +1064,7 @@ async function loadDutyRound(round, venueOverride, markDirty) {
   let query = '?season=' + DUTY_SEASON;
   if (round) query += '&round=' + encodeURIComponent(round);
   if (venueOverride) query += '&venue=' + encodeURIComponent(venueOverride);
-  const res = await fetch('/api/game-day-duties' + query);
+  const res = await fetch(BASE + '/api/game-day-duties' + query);
   const data = await res.json().catch(function () { return {}; });
   if (!res.ok) return showStatus('duties', data.error || 'Could not load game day duties', 'error');
   dutyData = data;
@@ -1190,7 +1191,7 @@ async function saveDutyRound() {
   const btn = document.getElementById('dutySaveBtn');
   btn.disabled = true;
   showStatus('duties', 'Saving Round ' + dutyRound + '...', 'success');
-  const res = await fetch('/api/game-day-duties', {
+  const res = await fetch(BASE + '/api/game-day-duties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ season: DUTY_SEASON, round: dutyRound, venue: dutyData.venue, grades: grades })
@@ -1208,7 +1209,7 @@ async function saveDutyRound() {
 }
 
 async function loadDutyTally() {
-  const res = await fetch('/api/game-day-tally?season=' + DUTY_SEASON);
+  const res = await fetch(BASE + '/api/game-day-tally?season=' + DUTY_SEASON);
   const data = await res.json().catch(function () { return {}; });
   if (!res.ok) return;
   dutyCounts = {};
@@ -1421,7 +1422,7 @@ const { id } = getSelected();
 if (!id) return alert('Select a team first');
 showStatus('fixtures', 'Syncing...', 'success');
 try {
-const res = await fetch('/api/sync-fixtures', {
+const res = await fetch(BASE + '/api/sync-fixtures', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({ teamId: id })
@@ -1440,7 +1441,7 @@ const { id } = getSelected();
 if (!id) return alert('Select a team first');
 showStatus('game', 'Fetching team sheet...', 'success');
 try {
-const res = await fetch('/api/sync-game', {
+const res = await fetch(BASE + '/api/sync-game', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({ teamId: id })
@@ -1472,7 +1473,7 @@ showStatus('game', '❌ ' + e.message, 'error');
 async function syncAllUpcoming() {
 showStatus('all-sync', 'Checking every team in the current season...', 'success');
 try {
-const res = await fetch('/api/sync-all-upcoming', { method: 'POST' });
+const res = await fetch(BASE + '/api/sync-all-upcoming', { method: 'POST' });
 const data = await res.json();
 if (!res.ok) throw new Error(data.error);
 const errors = data.errors?.length ? ' Errors: ' + data.errors.map(e => e.team + ': ' + e.error).join('; ') : '';
@@ -1487,7 +1488,7 @@ const id = document.getElementById('memberSelect').value;
 if (!id) return alert('Select a member first');
 showStatus('pin', 'Looking up...', 'success');
 try {
-const res = await fetch('/api/members/' + id + '/pin');
+const res = await fetch(BASE + '/api/members/' + id + '/pin');
 const data = await res.json();
 if (!res.ok) throw new Error(data.error);
 showStatus('pin', '✅ PIN found', 'success');
@@ -1503,7 +1504,7 @@ showStatus('pin', '❌ ' + e.message, 'error');
 
 // ---------- Season / Team / Round browser ----------
 async function loadSeasons(keepYear) {
-const res = await fetch('/api/seasons');
+const res = await fetch(BASE + '/api/seasons');
 const data = await res.json();
 const sel = document.getElementById('seasonSelect');
 sel.innerHTML = '<option value="">Select season...</option>' + (data.seasons || []).map(s =>
@@ -1517,7 +1518,7 @@ const btn = e.currentTarget;
 btn.disabled = true;
 showStatus('seasons', 'Pulling every season and Cockburn Lakes team from PlayHQ...', 'success');
 try {
-const res = await fetch('/api/sync-seasons', { method: 'POST' });
+const res = await fetch(BASE + '/api/sync-seasons', { method: 'POST' });
 const data = await res.json();
 if (!res.ok) throw new Error(data.error);
 const list = data.seasons.map(s => '<strong>' + s.year + '</strong>: ' + (s.teams.join(', ') || 'no teams')).join('<br>');
@@ -1553,7 +1554,7 @@ return;
 }
 teamSel.innerHTML = '<option value="">Loading teams...</option>';
 teamSel.disabled = true;
-const res = await fetch(\`/api/seasons/\${year}/teams\`);
+const res = await fetch(BASE + \`/api/seasons/\${year}/teams\`);
 const data = await res.json();
 teamSel.innerHTML = '<option value="">Select team...</option>' + (data.teams || []).map(t =>
 \`<option value="\${t.id}">\${t.grade_name ? t.grade_name + ' — ' : ''}\${t.team_name}</option>\`
@@ -1562,7 +1563,7 @@ teamSel.disabled = false;
 });
 
 async function syncTeamFixtures(teamId) {
-const res = await fetch('/api/sync-fixtures', {
+const res = await fetch(BASE + '/api/sync-fixtures', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({ teamId })
@@ -1576,7 +1577,7 @@ async function loadRounds(teamId) {
 const roundSel = document.getElementById('roundSelect');
 roundSel.innerHTML = '<option value="">Loading rounds...</option>';
 roundSel.disabled = true;
-const res = await fetch(\`/api/teams/\${teamId}/rounds\`);
+const res = await fetch(BASE + \`/api/teams/\${teamId}/rounds\`);
 const data = await res.json();
 const rounds = data.rounds || [];
 roundSel.innerHTML = '<option value="">Select round...</option>' + rounds.map(r =>
@@ -1634,7 +1635,7 @@ const teamId = document.getElementById('browseTeamSelect').value;
 const container = document.getElementById('gamesContainer');
 resetBelowSeason();
 if (!roundId || !teamId) return;
-const res = await fetch(\`/api/teams/\${teamId}/rounds/\${roundId}\`);
+const res = await fetch(BASE + \`/api/teams/\${teamId}/rounds/\${roundId}\`);
 const data = await res.json();
 const games = data.games || [];
 container.innerHTML = games.map(g => \`
@@ -1664,7 +1665,7 @@ return list.map(p => \`
 async function openGame(playhqGameId) {
 showStatus('browse', 'Syncing game from PlayHQ...', 'success');
 try {
-const res = await fetch(\`/api/game/\${playhqGameId}\`);
+const res = await fetch(BASE + \`/api/game/\${playhqGameId}\`);
 const data = await res.json();
 if (!res.ok) throw new Error(data.error);
 const saved = data.savedPlayers ? ' — saved ' + data.savedPlayers + ' to team sheet' : ' — no team sheet on PlayHQ';
@@ -1702,7 +1703,8 @@ ctx.waitUntil(syncAllUpcomingTeamSheets(env.DB, env.PLAYHQ_API_KEY));
 
 async fetch(request, env) {
 const url = new URL(request.url);
-const path = url.pathname;
+// Served at /admin on the club domain and at the workers.dev root; both map to the same routes.
+const path = url.pathname.replace(/^\/admin(?=\/|$)/, "") || "/";
 
 // The login page itself is public; it contains no data.
 if (path === "/") {
