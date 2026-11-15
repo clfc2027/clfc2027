@@ -3,24 +3,24 @@ import { CSS } from "./styles.js";
 import { JS } from "./client.js";
 
 var POSITIONS = [
-  { id: "FULL_BACK", label: "Full Back", short: "FB", x: 50, y: 7, line: "back" },
-  { id: "BACK_POCKET_L", label: "Back Pocket", short: "BP", x: 26, y: 15, line: "back" },
-  { id: "BACK_POCKET_R", label: "Back Pocket", short: "BP", x: 74, y: 15, line: "back" },
-  { id: "BACK_FLANK_L", label: "Back Flank", short: "BF", x: 16, y: 26, line: "back" },
-  { id: "CENTRE_HALF_BACK", label: "Centre Half Back", short: "CHB", x: 50, y: 24, line: "back" },
-  { id: "BACK_FLANK_R", label: "Back Flank", short: "BF", x: 84, y: 26, line: "back" },
-  { id: "WING_L", label: "Wing", short: "W", x: 10, y: 44, line: "mid" },
-  { id: "RUCK", label: "Ruck", short: "RK", x: 41, y: 39, line: "mid" },
-  { id: "RUCK_ROVER", label: "Ruck Rover", short: "RR", x: 59, y: 39, line: "mid" },
-  { id: "CENTRE", label: "Centre", short: "C", x: 41, y: 51, line: "mid" },
-  { id: "ROVER", label: "Rover", short: "ROV", x: 59, y: 51, line: "mid" },
-  { id: "WING_R", label: "Wing", short: "W", x: 90, y: 44, line: "mid" },
-  { id: "FORWARD_FLANK_L", label: "Forward Flank", short: "FF-L", x: 16, y: 69, line: "forward" },
-  { id: "CENTRE_HALF_FORWARD", label: "Centre Half Forward", short: "CHF", x: 50, y: 71, line: "forward" },
-  { id: "FORWARD_FLANK_R", label: "Forward Flank", short: "FF-R", x: 84, y: 69, line: "forward" },
-  { id: "FORWARD_POCKET_L", label: "Forward Pocket", short: "FP", x: 26, y: 84, line: "forward" },
-  { id: "FULL_FORWARD", label: "Full Forward", short: "FF", x: 50, y: 92, line: "forward" },
-  { id: "FORWARD_POCKET_R", label: "Forward Pocket", short: "FP", x: 74, y: 84, line: "forward" }
+  { id: "FULL_BACK", label: "Full Back", short: "FB", x: 50, y: 12, line: "back" },
+  { id: "BACK_POCKET_L", label: "Back Pocket", short: "BP", x: 33, y: 22, line: "back" },
+  { id: "BACK_POCKET_R", label: "Back Pocket", short: "BP", x: 67, y: 22, line: "back" },
+  { id: "BACK_FLANK_L", label: "Back Flank", short: "BF", x: 26, y: 33, line: "back" },
+  { id: "CENTRE_HALF_BACK", label: "Centre Half Back", short: "CHB", x: 50, y: 33, line: "back" },
+  { id: "BACK_FLANK_R", label: "Back Flank", short: "BF", x: 77, y: 33, line: "back" },
+  { id: "WING_L", label: "Wing", short: "W", x: 25, y: 50, line: "mid" },
+  { id: "RUCK", label: "Ruck", short: "RK", x: 50, y: 50, line: "mid" },
+  { id: "RUCK_ROVER", label: "Ruck Rover", short: "RR", x: 10, y: 78, line: "mid" },
+  { id: "CENTRE", label: "Centre", short: "C", x: 10, y: 86, line: "mid" },
+  { id: "ROVER", label: "Rover", short: "ROV", x: 10, y: 94, line: "mid" },
+  { id: "WING_R", label: "Wing", short: "W", x: 75, y: 50, line: "mid" },
+  { id: "FORWARD_FLANK_L", label: "Forward Flank", short: "FF-L", x: 25, y: 66, line: "forward" },
+  { id: "CENTRE_HALF_FORWARD", label: "Centre Half Forward", short: "CHF", x: 50, y: 66, line: "forward" },
+  { id: "FORWARD_FLANK_R", label: "Forward Flank", short: "FF-R", x: 75, y: 66, line: "forward" },
+  { id: "FORWARD_POCKET_L", label: "Forward Pocket", short: "FP", x: 33, y: 78, line: "forward" },
+  { id: "FULL_FORWARD", label: "Full Forward", short: "FF", x: 50, y: 91, line: "forward" },
+  { id: "FORWARD_POCKET_R", label: "Forward Pocket", short: "FP", x: 67, y: 78, line: "forward" }
 ];
 var INTERCHANGE_COUNT = 4;
 var HUB_URL = "https://clfc2027.clfc2027.workers.dev/";
