@@ -141,7 +141,6 @@ function render() {
   const header = \`
     <header class="masthead">
       <div class="brand">
-        <div class="brand-mark">CL</div>
         <div>
           <h1>Cockburn Lakes Coaches Board</h1>
           <div class="sub">CLFC 2027 Season</div>
@@ -218,6 +217,8 @@ function render() {
         <div class="third-line bottom"></div>
         <div class="centre-square"></div>
         <div class="centre-circle"></div>
+        <div class="goal-posts top"></div>
+        <div class="goal-posts bottom"></div>
         \${POSITIONS.map((pos) => renderSlot(pos)).join("")}
       </div>
       <div class="interchange-panel">
