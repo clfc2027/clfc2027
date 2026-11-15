@@ -344,6 +344,14 @@ var resultsTableReady = false;
 async function ensureResultsTable(db) {
   if (resultsTableReady) return;
   await db.prepare(
+    `CREATE TABLE IF NOT EXISTS compare_sheets (
+       game_id TEXT PRIMARY KEY,
+       player_count INTEGER NOT NULL,
+       players TEXT NOT NULL,
+       synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+     )`
+  ).run();
+  await db.prepare(
     `CREATE TABLE IF NOT EXISTS compare_game_results (
        game_id TEXT PRIMARY KEY,
        team_id INTEGER,
@@ -370,8 +378,11 @@ async function getCompareRounds(db, gradeId) {
   const team = await compareTeamFor(db, gradeId);
   const { results } = await db.prepare(
     `SELECT f.playhq_game_id AS game_id, f.round_name, f.opponent_name, f.game_date, f.venue_name, f.status,
-            (SELECT COUNT(*) FROM team_sheet_players tsp
-              WHERE tsp.game_id = f.playhq_game_id AND COALESCE(tsp.role_type, 'Player') = 'Player') AS players,
+            COALESCE(
+              (SELECT cs.player_count FROM compare_sheets cs WHERE cs.game_id = f.playhq_game_id),
+              (SELECT COUNT(*) FROM team_sheet_players tsp
+                WHERE tsp.game_id = f.playhq_game_id AND COALESCE(tsp.role_type, 'Player') = 'Player')
+            ) AS players,
             r.outcome, r.our_score, r.opp_score,
             CASE WHEN r.game_id IS NULL THEN 0 ELSE 1 END AS has_result
        FROM fixtures f
@@ -392,20 +403,27 @@ async function getCompareSheet(db, gameId) {
       WHERE f.playhq_game_id = ?1`
   ).bind(gameId || "").first();
   if (!game || Number(game.season_year) !== COMPARE_YEAR) throw httpError("Game not found", 404);
-  const { results } = await db.prepare(
-    `SELECT playhq_player_id, first_name, last_name, player_number, captain_role, is_emergency, is_fill_in
-       FROM team_sheet_players
-      WHERE game_id = ?1 AND COALESCE(role_type, 'Player') = 'Player'
-      ORDER BY is_emergency ASC, CAST(player_number AS INTEGER), last_name`
-  ).bind(gameId).all();
-  const players = results.map((p) => ({
-    playhq_player_id: p.playhq_player_id,
-    name: `${(p.first_name || "").trim()} ${(p.last_name || "").trim()}`.trim(),
-    jumper: p.player_number || null,
-    captain: p.captain_role || null,
-    emergency: !!p.is_emergency,
-    fill_in: !!p.is_fill_in
-  }));
+  // Compare's own copy of the sheet. The official team_sheet_players is only read as a fallback, never written here.
+  let players;
+  const own = await db.prepare(`SELECT players FROM compare_sheets WHERE game_id = ?1`).bind(gameId).first();
+  if (own) {
+    players = JSON.parse(own.players || "[]");
+  } else {
+    const { results } = await db.prepare(
+      `SELECT playhq_player_id, first_name, last_name, player_number, captain_role, is_emergency, is_fill_in
+         FROM team_sheet_players
+        WHERE game_id = ?1 AND COALESCE(role_type, 'Player') = 'Player'`
+    ).bind(gameId).all();
+    players = results.map((p) => ({
+      playhq_player_id: p.playhq_player_id,
+      name: `${(p.first_name || "").trim()} ${(p.last_name || "").trim()}`.trim(),
+      jumper: p.player_number || null,
+      captain: p.captain_role || null,
+      emergency: !!p.is_emergency,
+      fill_in: !!p.is_fill_in
+    }));
+  }
+  players.sort((a, b) => (a.emergency === b.emergency ? 0 : a.emergency ? 1 : -1) || (parseInt(a.jumper) || 999) - (parseInt(b.jumper) || 999));
   const r = await db.prepare(`SELECT * FROM compare_game_results WHERE game_id = ?1`).bind(gameId).first();
   let result = null;
   let opposition = null;
@@ -486,28 +504,22 @@ async function syncCompareGame(db, apiKey, gameId, gradeId) {
     JSON.stringify(oppPlayers)
   );
 
-  if (!ours.length) {
-    await resultStmt.run();
-    return { game_id: gameId, round_name: fx.round_name, status: "NO_TEAM_SHEET", players: 0, has_result: 1 };
-  }
-
-  const players = ours.filter((a) => (a.roleType || "Player") === "Player").length;
-  const sourceHash = await sha256Hex(JSON.stringify(ours));
-  const stmts = [resultStmt, db.prepare(`DELETE FROM team_sheet_players WHERE game_id = ?1`).bind(gameId)];
-  for (const p of ours) {
-    stmts.push(db.prepare(
-      `INSERT OR IGNORE INTO team_sheet_players
-         (game_id, playhq_player_id, first_name, last_name, player_number, player_position, captain_role, is_fill_in, is_emergency, role_type)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
-    ).bind(gameId, p.id, p.firstName ?? null, p.lastName ?? null, p.playerNumber ?? null, p.playerPosition || p.position || null,
-      p.captainRole || null, p.isFillIn ? 1 : 0, p.isEmergency ? 1 : 0, p.roleType || "Player"));
-  }
-  stmts.push(db.prepare(
-    `INSERT INTO team_sheet_sync_state (game_id, team_id, source_hash, synced_at)
-       VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
-     ON CONFLICT(game_id) DO UPDATE SET team_id = excluded.team_id, source_hash = excluded.source_hash, synced_at = CURRENT_TIMESTAMP`
-  ).bind(gameId, team.id, sourceHash));
-  await db.batch(stmts);
+  const sheet = ours.map((a) => ({
+    playhq_player_id: a.id || null,
+    name: `${(a.firstName || "").trim()} ${(a.lastName || "").trim()}`.trim(),
+    jumper: a.playerNumber || null,
+    captain: a.captainRole || null,
+    emergency: !!a.isEmergency,
+    fill_in: !!a.isFillIn,
+    role_type: a.roleType || "Player"
+  }));
+  const players = sheet.filter((p) => p.role_type === "Player").length;
+  const sheetStmt = db.prepare(
+    `INSERT INTO compare_sheets (game_id, player_count, players, synced_at) VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+     ON CONFLICT(game_id) DO UPDATE SET player_count = excluded.player_count, players = excluded.players, synced_at = CURRENT_TIMESTAMP`
+  ).bind(gameId, players, JSON.stringify(sheet));
+  await db.batch([resultStmt, sheetStmt]);
+  if (!ours.length) return { game_id: gameId, round_name: fx.round_name, status: "NO_TEAM_SHEET", players: 0, has_result: 1 };
   return { game_id: gameId, round_name: fx.round_name, status: "UPDATED", players, has_result: 1 };
 }
 // Re-reads the 2026 fixture list for this board's team from PlayHQ.
