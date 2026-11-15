@@ -338,15 +338,32 @@ var DUTY_PUBLIC_TASKS = [
   { key: "SCOREBOARD", label: "Scoreboard" },
   { key: "CHANGEROOM", label: "Changeroom Sweep" }
 ];
-// Latest round with duties saved for the season, with every grade's names for each duty.
-// Returns an empty result if the duty tables have never been created.
-async function getLatestDuties(flexi) {
-  const empty = { season: DUTY_SEASON_PUBLIC, round: null, venue: null, grades: [] };
+// Newest round with duties saved for the season. Returns null once a newer team sheet has been
+// saved on the board: each new round starts with an empty duty list until the admin allocates it.
+async function latestDutyRound(flexi) {
+  let latest = null;
   try {
-    const latest = await flexi.prepare(
+    latest = await flexi.prepare(
       `SELECT round_name FROM game_day_allocations WHERE season_year = ?1
         ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
     ).bind(DUTY_SEASON_PUBLIC).first();
+  } catch (e) {
+    if (/no such table/i.test(e.message)) return null;
+    throw e;
+  }
+  if (!latest) return null;
+  const teamRound = await flexi.prepare(
+    `SELECT round_name FROM board_selections ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
+  ).first();
+  if (teamRound && Number(teamRound.round_name) > Number(latest.round_name)) return null;
+  return latest;
+}
+// Latest round with duties saved for the season, with every grade's names for each duty.
+// Returns an empty result if the duty tables have never been created or a newer team sheet exists.
+async function getLatestDuties(flexi) {
+  const empty = { season: DUTY_SEASON_PUBLIC, round: null, venue: null, grades: [] };
+  try {
+    const latest = await latestDutyRound(flexi);
     if (!latest) return empty;
     const round = latest.round_name;
     const type = await flexi.prepare(
@@ -413,15 +430,7 @@ async function checkDutiesByPin(request, env) {
   await flexi.prepare(`DELETE FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).run();
 
   const name = (member.first_name + " " + member.last_name).trim();
-  let latest = null;
-  try {
-    latest = await flexi.prepare(
-      `SELECT round_name FROM game_day_allocations WHERE season_year = ?1
-        ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
-    ).bind(DUTY_SEASON_PUBLIC).first();
-  } catch (e) {
-    if (!/no such table/i.test(e.message)) throw e;
-  }
+  const latest = await latestDutyRound(flexi);
   if (!latest) return { ok: true, name, round: null, venue: null, duties: [] };
 
   const round = latest.round_name;
