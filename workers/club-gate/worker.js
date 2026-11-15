@@ -147,7 +147,7 @@ export function gatePage(message = "") {
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok && res.d.ok) {
-          document.querySelector("main.card").innerHTML = '<img class="hero" src="/gate/confirm.jpg?v=1" alt=""><h1>You\'re in</h1><p>Opening the club hub...</p>';
+          document.querySelector("main.card").innerHTML = '<img class="hero" src="/gate/confirm.jpg?v=1" alt=""><h1>You are in</h1><p>Opening the club hub...</p>';
           setTimeout(function () { location.reload(); }, 2000);
           return;
         }
