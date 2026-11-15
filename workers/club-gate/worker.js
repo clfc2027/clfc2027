@@ -98,6 +98,10 @@ export function gatePage(message = "") {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Members | Cockburn Lakes FC</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#070b14">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
   body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #14213d; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1d1d1f; padding: 16px; box-sizing: border-box; }
   .card { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
@@ -229,6 +233,12 @@ export default {
     }
     if (path === "/gate/hero.jpg") {
       return new Response(heroBytes(), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+    }
+
+    // Install files are public: the browser fetches the manifest, icons and service worker
+    // without a session, so the gate would stop "Add to Home Screen". They hold no member data.
+    if (path === "/manifest.webmanifest" || path === "/sw.js" || path.startsWith("/icons/")) {
+      return env.HUB.fetch(request);
     }
 
     // Admin keeps its own passcode and sits outside the member gate.

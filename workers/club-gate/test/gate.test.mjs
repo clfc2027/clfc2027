@@ -195,3 +195,29 @@ test("confirmation image is public and served as a JPEG", async () => {
   assert.equal(bytes[0], 0xff);
   assert.equal(bytes[1], 0xd8);
 });
+
+test("install files are public and come from the hub's static assets", async () => {
+  const { env, seen } = newEnv();
+  for (const p of ["/manifest.webmanifest", "/sw.js", "/icons/icon-192.png", "/icons/icon-512.png"]) {
+    const r = await worker.fetch(req(p), env);
+    assert.equal(r.status, 200, p);
+    assert.equal(await r.text(), `HUB:${p}`);
+  }
+  assert.deepEqual(seen, ["HUB", "HUB", "HUB", "HUB"]);
+});
+
+test("sign-in page links the app manifest and icons", async () => {
+  const { env } = newEnv();
+  const r = await worker.fetch(req("/"), env);
+  const html = await r.text();
+  assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+  assert.match(html, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png">/);
+});
+
+test("other hub files stay behind the gate", async () => {
+  const { env } = newEnv();
+  for (const p of ["/manifest.json", "/install.js", "/app.js"]) {
+    const r = await worker.fetch(req(p), env);
+    assert.equal(r.status, 401, p);
+  }
+});
