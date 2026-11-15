@@ -243,19 +243,20 @@ body:not(.intro-lock) .site-shell { animation: page-reveal .9s .08s cubic-bezier
 .utility-mark br { color: var(--red-deep); }
 
 /* Game day duty checker */
-.section.duty-check { padding: 90px 0 30px; }
-.duty-check-form { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
-.duty-check-label { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-.duty-check-input { width: 150px; padding: 14px 12px; color: var(--white); background: var(--navy); border: 1px solid var(--line); font: 400 24px/1 var(--display); letter-spacing: .4em; text-align: center; }
+.section.duty-check { padding: 40px 0 10px; }
+.duty-check-form { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.duty-check-form h2 { margin: 0; color: var(--white); font: 400 22px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.duty-check-input { width: 130px; padding: 8px 10px; color: var(--white); background: var(--navy); border: 1px solid var(--line); font: 400 20px/1 var(--display); letter-spacing: .4em; text-align: center; }
+.duty-check-input::placeholder { color: var(--muted); font-size: 13px; letter-spacing: .08em; }
 .duty-check-input:focus { outline: 2px solid var(--blue-bright); outline-offset: 2px; }
-.duty-check-result { margin-top: 22px; padding: 18px 20px; border: 1px solid var(--line); background: rgba(255,255,255,.02); }
+.duty-check-result { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); background: rgba(255,255,255,.02); }
 .duty-check-result:empty { display: none; }
 .duty-check-result p { margin: 0; font-size: 16px; }
 .duty-check-result ul { margin: 12px 0 0; padding-left: 20px; font-size: 16px; font-weight: 700; }
 .duty-check-result li { margin: 4px 0; }
 .duty-check-result.err { border-color: var(--red); color: #ffb3b8; }
 @media (max-width: 680px) {
-  .section.duty-check { padding: 60px 0 20px; }
+  .section.duty-check { padding: 28px 0 8px; }
+  .duty-check-form h2 { width: 100%; }
   .duty-check-input { width: 100%; }
-  .duty-check-form .button { width: 100%; }
 }

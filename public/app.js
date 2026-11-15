@@ -63,6 +63,11 @@ if (intro && introVideo) {
     return p;
   }
 
+  // Check automatically once all four digits are entered; Enter also submits.
+  document.getElementById('dutyPin').addEventListener('input', function (e) {
+    if (/^[0-9]{4}$/.test(e.target.value)) form.requestSubmit();
+  });
+
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     const pin = document.getElementById('dutyPin').value.trim();
