@@ -1,0 +1,47 @@
+# club-gate: member PIN gate in front of cockburnlakes.com (and the admin route).
+name = "club-gate"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# PIN check against member_directory
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# Lockout table (gate_pin_attempts)
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
+# Tools behind the gate. Each service's name is its Worker name.
+[[services]]
+binding = "HUB"
+service = "clfc2027"
+
+[[services]]
+binding = "FINES"
+service = "weekly-fines"
+
+[[services]]
+binding = "GAMEDAY"
+service = "game-day"
+
+[[services]]
+binding = "COACHES"
+service = "coaches-board"
+
+[[services]]
+binding = "PLAYERS"
+service = "players-player"
+
+[[services]]
+binding = "FGK"
+service = "fgk"
+
+[[services]]
+binding = "ADMIN"
+service = "admin"
+
+# Secret set in the dashboard, not in this file: SESSION_SECRET
