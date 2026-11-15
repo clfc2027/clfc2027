@@ -9,6 +9,7 @@
 // ADMIN is outside the gate: it has its own passcode.
 
 import { heroBytes } from "./hero.js";
+import { confirmBytes } from "./confirm.js";
 
 const COOKIE = "clfc_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -145,7 +146,11 @@ export function gatePage(message = "") {
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
-        if (res.ok && res.d.ok) { location.reload(); return; }
+        if (res.ok && res.d.ok) {
+          document.querySelector("main.card").innerHTML = '<img class="hero" src="/gate/confirm.jpg?v=1" alt=""><h1>You\'re in</h1><p>Opening the club hub...</p>';
+          setTimeout(function () { location.reload(); }, 2000);
+          return;
+        }
         msg.textContent = res.d.error || "Something went wrong. Try again.";
         btn.disabled = false;
       })
@@ -215,6 +220,9 @@ export default {
     const path = url.pathname;
 
     // Gate artwork is public: it is the picture on the sign-in page itself.
+    if (path === "/gate/confirm.jpg") {
+      return new Response(confirmBytes(), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+    }
     if (path === "/gate/hero.jpg") {
       return new Response(heroBytes(), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
     }
