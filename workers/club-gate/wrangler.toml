@@ -3,6 +3,10 @@ name = "club-gate"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
+# Members reach the club only through cockburnlakes.com, never the workers.dev address.
+workers_dev = false
+preview_urls = false
+
 # PIN check against member_directory
 [[d1_databases]]
 binding = "DB"
