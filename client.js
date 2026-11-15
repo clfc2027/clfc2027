@@ -1,0 +1,556 @@
+export const JS = `const POSITIONS = window.__POSITIONS__;
+const IC_COUNT = window.__INTERCHANGE_COUNT__;
+const HUB_URL = window.__HUB_URL__ || "/";
+const app = document.getElementById("app");
+
+let state = {
+  grades: [],
+  teamId: "",
+  round: "",
+  opponent: "",
+  matchDate: "",
+  venue: "",
+  positions: {},
+  interchange: Array(IC_COUNT).fill(null),
+  activeSlot: null, // { type: 'field'|'interchange', slot, index }
+  presenting: false,
+  unlocked: false,
+  pin: "",
+  busy: false,
+  gateError: "",
+};
+
+function pinKey(teamId) {
+  return "coachPin:" + teamId;
+}
+
+function currentGrade() {
+  return state.grades.find((g) => String(g.team_id) === String(state.teamId));
+}
+
+function allSelectedIds() {
+  return [
+    ...Object.values(state.positions).map((p) => p && p.member_id).filter(Boolean),
+    ...state.interchange.map((p) => p && p.member_id).filter(Boolean),
+  ];
+}
+
+function setStatus(msg, kind) {
+  const el = document.getElementById("statusLine");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.className = "status-line" + (kind ? " " + kind : "");
+}
+
+// Every request carries the coach PIN for the grade that is open. The server checks it.
+async function api(path, opts) {
+  opts = Object.assign({}, opts || {});
+  const headers = Object.assign({}, opts.headers || {});
+  if (state.pin) headers["x-coach-pin"] = state.pin;
+  opts.headers = headers;
+  const res = await fetch(path, opts);
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = {};
+  }
+  if (!res.ok) {
+    const err = new Error(data.error || "Request failed");
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function postJson(path, body) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Checks a PIN for the current grade. On success the board opens and the PIN is kept
+// for this browser tab only (sessionStorage), so a reload does not ask again.
+async function unlock(pin, silent) {
+  state.busy = true;
+  state.gateError = "";
+  try {
+    await postJson("/api/coach/verify", { team_id: state.teamId, pin: pin });
+    state.pin = pin;
+    state.unlocked = true;
+    sessionStorage.setItem(pinKey(state.teamId), pin);
+  } catch (e) {
+    state.pin = "";
+    state.unlocked = false;
+    sessionStorage.removeItem(pinKey(state.teamId));
+    if (!silent) state.gateError = e.message;
+  }
+  state.busy = false;
+}
+
+function lockBoard() {
+  sessionStorage.removeItem(pinKey(state.teamId));
+  state.unlocked = false;
+  state.pin = "";
+  state.gateError = "";
+  state.positions = {};
+  state.interchange = Array(IC_COUNT).fill(null);
+}
+
+// Called whenever the grade changes: clears the board and tries the PIN saved in this tab.
+async function prepareGrade() {
+  state.positions = {};
+  state.interchange = Array(IC_COUNT).fill(null);
+  state.round = "";
+  state.opponent = "";
+  state.matchDate = "";
+  state.venue = "";
+  state.unlocked = false;
+  state.pin = "";
+  state.gateError = "";
+  const stored = sessionStorage.getItem(pinKey(state.teamId));
+  if (stored) await unlock(stored, true);
+}
+
+async function init() {
+  render();
+  try {
+    const { grades } = await api("/api/grades");
+    state.grades = grades;
+    if (grades.length) {
+      state.teamId = String(grades[0].team_id);
+      await prepareGrade();
+    }
+  } catch (e) {
+    state.gateError = "Could not load grades: " + e.message;
+  }
+  render();
+}
+
+function gateHtml(grade) {
+  const disabled = !grade || state.busy ? " disabled" : "";
+  const label = grade ? grade.grade_name : "No 2027 grades yet";
+  return \`
+    <div class="gate-card">
+      <div class="club">COACHES ONLY</div>
+      <h3>\${escapeHtml(label)}</h3>
+      <p>Enter the 4-digit coach PIN to open this board.</p>
+      <form id="gateForm" class="gate-form">
+        <input id="gatePin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off"\${disabled}>
+        <button class="btn-primary" type="submit"\${disabled}>\${state.busy ? "Checking…" : "Unlock"}</button>
+      </form>
+      <div class="gate-error">\${escapeHtml(state.gateError)}</div>
+    </div>\`;
+}
+
+function render() {
+  document.body.classList.toggle("presenting", state.presenting);
+  const grade = currentGrade();
+  app.innerHTML = \`
+    <header class="masthead">
+      <div class="brand">
+        <div class="brand-mark">CL</div>
+        <div>
+          <h1>Cockburn Lakes Coaches Board</h1>
+          <div class="sub">CLFC 2027 Season</div>
+        </div>
+      </div>
+      <div class="masthead-right">
+        <a class="back-btn" href="\${escapeAttr(HUB_URL)}">&larr; Back to Hub</a>
+        <button class="present-toggle" id="presentBtn">
+          <span class="edit-label">\${state.presenting ? "Exit Present" : "Present"}</span>
+          \${state.presenting ? "" : "&nbsp;&middot; Present Mode"}
+        </button>
+      </div>
+    </header>
+
+    <div class="controls-bar">
+      <div class="field">
+        <label>Grade</label>
+        <select id="gradeSelect"\${state.grades.length ? "" : " disabled"}>
+          \${state.grades.length
+            ? state.grades
+                .map((g) => \`<option value="\${g.team_id}" \${String(g.team_id) === String(state.teamId) ? "selected" : ""}>\${g.grade_name}</option>\`)
+                .join("")
+            : '<option value="">No 2027 grades yet</option>'}
+        </select>
+      </div>
+      \${state.unlocked ? \`
+      <div class="field round-list-wrap">
+        <label>Round</label>
+        <input id="roundInput" placeholder="e.g. Round 7" value="\${escapeAttr(state.round)}" autocomplete="off">
+        <div class="round-suggest" id="roundSuggest" style="display:none"></div>
+      </div>
+      <div class="field">
+        <label>Opponent</label>
+        <input id="opponentInput" placeholder="Opponent club" value="\${escapeAttr(state.opponent)}">
+      </div>
+      <div class="field">
+        <label>Match date</label>
+        <input id="dateInput" type="date" value="\${escapeAttr(state.matchDate)}">
+      </div>
+      <div class="action-buttons action-buttons-wrap">
+        <button class="btn-ghost" id="loadBtn">Load</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+        <button class="btn-ghost" id="lockBtn">Lock</button>
+        <button class="btn-primary" id="saveBtn">Save Team</button>
+      </div>\` : ""}
+    </div>
+
+    \${state.unlocked ? \`
+    <div class="team-banner">
+      <div class="club">COCKBURN LAKES FOOTBALL CLUB</div>
+      <div class="grade">\${grade ? grade.grade_name : "SELECT A GRADE"}</div>
+      <div class="round">\${state.round ? state.round.toUpperCase() : "ROUND —"}\${state.venue ? " · " + state.venue : ""}</div>
+      <div class="versus">
+        <span>COCKBURN LAKES</span>
+        <span class="vs">VS</span>
+        <span>\${state.opponent ? state.opponent.toUpperCase() : "OPPONENT"}</span>
+      </div>
+    </div>
+
+    <div class="board-layout">
+      <div class="oval-wrap" id="oval">
+        <div class="arc-label top">50</div>
+        <div class="arc-label bottom">50</div>
+        <div class="line-label backs">BACKS</div>
+        <div class="line-label forwards">FORWARDS</div>
+        <div class="third-line top"></div>
+        <div class="third-line bottom"></div>
+        <div class="centre-square"></div>
+        <div class="centre-circle"></div>
+        \${POSITIONS.map((pos) => renderSlot(pos)).join("")}
+      </div>
+      <div class="interchange-panel">
+        <h3>Interchange</h3>
+        \${Array.from({ length: IC_COUNT })
+          .map((_, i) => renderInterchangeSlot(i))
+          .join("")}
+      </div>
+    </div>
+
+    <div class="status-line" id="statusLine"></div>
+
+    <div class="selector-overlay" id="selectorOverlay">
+      <div class="selector-modal">
+        <h4>Select Player</h4>
+        <input id="playerSearch" placeholder="Start typing name…" autocomplete="off">
+        <div class="selector-results" id="selectorResults"></div>
+        <button class="selector-close" id="selectorClose">Cancel</button>
+      </div>
+    </div>\` : gateHtml(grade)}
+  \`;
+
+  bindEvents();
+}
+
+function bindEvents() {
+  document.getElementById("presentBtn").onclick = () => {
+    state.presenting = !state.presenting;
+    render();
+  };
+
+  const gradeSelect = document.getElementById("gradeSelect");
+  if (gradeSelect) {
+    gradeSelect.onchange = async (e) => {
+      state.teamId = e.target.value;
+      await prepareGrade();
+      render();
+    };
+  }
+
+  const gateForm = document.getElementById("gateForm");
+  if (gateForm) {
+    gateForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const pin = document.getElementById("gatePin").value.trim();
+      if (!/^\\d{4}$/.test(pin)) {
+        state.gateError = "Enter the 4-digit PIN.";
+        render();
+        return;
+      }
+      await unlock(pin, false);
+      render();
+    };
+  }
+
+  if (!state.unlocked) return;
+
+  const roundInput = document.getElementById("roundInput");
+  if (roundInput) {
+    roundInput.oninput = (e) => {
+      state.round = e.target.value;
+    };
+    roundInput.onfocus = loadRoundSuggestions;
+    roundInput.onblur = () => setTimeout(() => {
+      const s = document.getElementById("roundSuggest");
+      if (s) s.style.display = "none";
+    }, 150);
+  }
+
+  const opponentInput = document.getElementById("opponentInput");
+  if (opponentInput) opponentInput.oninput = (e) => (state.opponent = e.target.value);
+
+  const dateInput = document.getElementById("dateInput");
+  if (dateInput) dateInput.oninput = (e) => (state.matchDate = e.target.value);
+
+  const loadBtn = document.getElementById("loadBtn");
+  if (loadBtn) loadBtn.onclick = loadSelection;
+
+  const clearBtn = document.getElementById("clearBtn");
+  if (clearBtn) clearBtn.onclick = () => {
+    if (!confirm("Clear the board? Unsaved changes will be lost.")) return;
+    state.positions = {};
+    state.interchange = Array(IC_COUNT).fill(null);
+    render();
+  };
+
+  const lockBtn = document.getElementById("lockBtn");
+  if (lockBtn) lockBtn.onclick = () => {
+    lockBoard();
+    render();
+  };
+
+  const saveBtn = document.getElementById("saveBtn");
+  if (saveBtn) saveBtn.onclick = saveSelection;
+
+  document.querySelectorAll(".slot-card").forEach((card) => {
+    card.addEventListener("click", () => openSelector(card.dataset.type, card.dataset.slot));
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type: card.dataset.type, slot: card.dataset.slot }));
+    });
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      card.classList.add("dragover");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("dragover"));
+    card.addEventListener("drop", (e) => {
+      e.preventDefault();
+      card.classList.remove("dragover");
+      const from = JSON.parse(e.dataTransfer.getData("text/plain"));
+      const to = { type: card.dataset.type, slot: card.dataset.slot };
+      swapSlots(from, to);
+    });
+  });
+
+  document.querySelectorAll("[data-remove-slot]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFromSlot(btn.dataset.removeType, btn.dataset.removeSlot);
+    });
+  });
+
+  const selectorClose = document.getElementById("selectorClose");
+  if (selectorClose) selectorClose.onclick = closeSelector;
+  const overlay = document.getElementById("selectorOverlay");
+  if (overlay) overlay.onclick = (e) => { if (e.target === overlay) closeSelector(); };
+}
+
+function renderSlot(pos) {
+  const card = state.positions[pos.id];
+  return \`
+    <div class="slot" style="left:\${pos.x}%; top:\${pos.y}%;">
+      <div class="slot-card \${card ? "" : "empty"}" data-slot="\${pos.id}" data-type="field" data-line="\${pos.line}" draggable="\${card ? "true" : "false"}">
+        \${card ? '<div class="remove-x" data-remove-slot="' + pos.id + '" data-remove-type="field">\\xD7</div>' : ""}
+        \${card ? \`<div class="pname solo">\${escapeHtml(card.name)}</div>\` : \`<div class="pname solo">Tap to add</div>\`}
+        <div class="pos-label">\${pos.label}</div>
+      </div>
+    </div>\`;
+}
+
+function renderInterchangeSlot(i) {
+  const card = state.interchange[i];
+  return \`
+    <div class="interchange-slot">
+      <div class="slot-card \${card ? "" : "empty"}" data-slot="\${i}" data-type="interchange" draggable="\${card ? "true" : "false"}">
+        \${card ? '<div class="remove-x" data-remove-slot="' + i + '" data-remove-type="interchange">\\xD7</div>' : ""}
+        <div class="num">\${i + 1}</div>
+        \${card ? \`<div class="pname ic-name">\${escapeHtml(card.name)}</div>\` : '<div class="pname">Add player</div>'}
+      </div>
+    </div>\`;
+}
+
+function initialLastName(fullName) {
+  const parts = fullName.trim().split(" ");
+  const last = parts.pop();
+  const first = parts.join(" ");
+  return (first ? first[0] + ". " : "") + last;
+}
+
+function escapeAttr(v) {
+  return (v || "").replace(/"/g, "&quot;");
+}
+
+function getSlotValue(type, slot) {
+  return type === "interchange" ? state.interchange[Number(slot)] : state.positions[slot];
+}
+function setSlotValue(type, slot, value) {
+  if (type === "interchange") state.interchange[Number(slot)] = value;
+  else state.positions[slot] = value;
+}
+
+function swapSlots(from, to) {
+  if (from.type === to.type && from.slot === to.slot) return;
+  const a = getSlotValue(from.type, from.slot);
+  const b = getSlotValue(to.type, to.slot);
+  setSlotValue(from.type, from.slot, b);
+  setSlotValue(to.type, to.slot, a);
+  render();
+}
+
+function removeFromSlot(type, slot) {
+  setSlotValue(type, slot, null);
+  render();
+}
+
+function openSelector(type, slot) {
+  state.activeSlot = { type, slot };
+  document.getElementById("selectorOverlay").classList.add("show");
+  const input = document.getElementById("playerSearch");
+  input.value = "";
+  input.focus();
+  document.getElementById("selectorResults").innerHTML = "";
+  let t;
+  input.oninput = () => {
+    clearTimeout(t);
+    t = setTimeout(() => runPlayerSearch(input.value), 250);
+  };
+}
+
+function closeSelector() {
+  document.getElementById("selectorOverlay").classList.remove("show");
+  state.activeSlot = null;
+}
+
+async function runPlayerSearch(q) {
+  const box = document.getElementById("selectorResults");
+  if (!q || q.trim().length < 2) {
+    box.innerHTML = '<div class="empty">Keep typing\\u2027 (2+ letters)</div>';
+    return;
+  }
+  try {
+    const { players } = await api("/api/players?team_id=" + state.teamId + "&search=" + encodeURIComponent(q.trim()));
+    const already = allSelectedIds();
+    const filtered = players.filter((p) => !already.includes(p.member_id));
+    if (!filtered.length) {
+      box.innerHTML = '<div class="empty">No matching, available players</div>';
+      return;
+    }
+    box.innerHTML = filtered
+      .map(
+        (p) =>
+          \`<div data-mid="\${p.member_id}">\${p.name}\${p.jumper ? " \\u2014 #" + p.jumper : ""}</div>\`
+      )
+      .join("");
+    box.querySelectorAll("[data-mid]").forEach((row, i) => {
+      row.onclick = () => {
+        const player = filtered[i];
+        setSlotValue(state.activeSlot.type, state.activeSlot.slot, {
+          member_id: player.member_id,
+          playhq_player_id: player.playhq_player_id,
+          name: player.name,
+          jumper: player.jumper,
+        });
+        closeSelector();
+        render();
+      };
+    });
+  } catch (e) {
+    box.innerHTML = '<div class="empty">Search failed: ' + e.message + "</div>";
+  }
+}
+
+async function loadRoundSuggestions() {
+  if (!state.teamId) return;
+  try {
+    const { rounds } = await api("/api/rounds?team_id=" + state.teamId);
+    const box = document.getElementById("roundSuggest");
+    if (!rounds.length) return;
+    box.innerHTML = rounds
+      .map(
+        (r) =>
+          \`<div data-round="\${escapeAttr(r.round_name)}" data-opp="\${escapeAttr(r.opponent_name || "")}" data-date="\${escapeAttr(r.game_date || "")}" data-venue="\${escapeAttr(r.venue_name || "")}">\${r.round_name}\${r.opponent_name ? " \\u2014 vs " + r.opponent_name : ""}</div>\`
+      )
+      .join("");
+    box.style.display = "block";
+    box.querySelectorAll("[data-round]").forEach((row) => {
+      row.onclick = () => {
+        state.round = row.dataset.round;
+        state.opponent = row.dataset.opp || state.opponent;
+        state.matchDate = (row.dataset.date || "").slice(0, 10);
+        state.venue = row.dataset.venue || state.venue;
+        box.style.display = "none";
+        render();
+      };
+    });
+  } catch (e) {
+    // silent \\u2014 suggestions are optional
+  }
+}
+
+async function loadSelection() {
+  if (!state.teamId || !state.round) {
+    setStatus("Choose a grade and round first.", "err");
+    return;
+  }
+  try {
+    const data = await api("/api/team?team_id=" + state.teamId + "&round=" + encodeURIComponent(state.round));
+    if (!data.selection) {
+      setStatus("No saved team found for that round yet.", "");
+      return;
+    }
+    state.opponent = data.selection.opponent_name || "";
+    state.matchDate = (data.selection.match_date || "").slice(0, 10);
+    state.venue = data.selection.venue_name || "";
+    state.positions = data.positions || {};
+    state.interchange = Array(IC_COUNT).fill(null).map((_, i) => data.interchange[i] || null);
+    render();
+    setStatus("Loaded saved team.", "ok");
+  } catch (e) {
+    setStatus("Could not load team: " + e.message, "err");
+  }
+}
+
+async function saveSelection() {
+  if (!state.teamId || !state.round.trim()) {
+    setStatus("Grade and round are required before saving.", "err");
+    return;
+  }
+  if (!state.opponent.trim()) {
+    setStatus("Enter an opponent before saving.", "err");
+    return;
+  }
+  const grade = currentGrade();
+  try {
+    const res = await api("/api/team", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        season_id: grade ? grade.season_id || null : null,
+        team_id: state.teamId,
+        round_name: state.round.trim(),
+        opponent_name: state.opponent.trim(),
+        match_date: state.matchDate || null,
+        venue_name: state.venue || null,
+        status: "saved",
+        positions: state.positions,
+        interchange: state.interchange,
+      }),
+    });
+    setStatus("Team saved.", "ok");
+  } catch (e) {
+    setStatus("Save failed: " + e.message, "err");
+  }
+}
+
+function escapeHtml(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+
+
+init();
+`;
