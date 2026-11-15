@@ -169,6 +169,12 @@ async function ensureBoard(db) {
       `INSERT OR IGNORE INTO board_grades (id, grade_name, sort_order) VALUES (?1, ?2, ?3)`
     ).bind(g.id, g.grade_name, g.sort_order).run();
   }
+  // Game time was added after the first release; add it to existing databases once.
+  try {
+    await db.prepare(`ALTER TABLE board_selections ADD COLUMN match_time TEXT`).run();
+  } catch (e) {
+    if (!/duplicate column/i.test(e.message)) throw e;
+  }
   boardReady = true;
 }
 
@@ -234,7 +240,7 @@ async function getSeasonRounds(db, gradeId) {
   if (!teamName) return [];
   try {
     const { results } = await db.prepare(
-      `SELECT f.round_name, f.opponent_name, f.game_date, f.venue_name
+      `SELECT f.round_name, f.opponent_name, f.game_date, f.game_time, f.venue_name
          FROM fixtures f
          JOIN teams t ON t.id = f.team_id
          JOIN seasons s ON s.id = t.season_id
@@ -245,6 +251,7 @@ async function getSeasonRounds(db, gradeId) {
       round_name: boardRoundName(r.round_name),
       opponent_name: r.opponent_name || null,
       match_date: r.game_date || null,
+      match_time: r.game_time || null,
       venue_name: String(r.venue_name || "").trim() || null
     }));
   } catch (e) {
@@ -262,7 +269,7 @@ async function getRounds(db, flexi, gradeId) {
 // Round names already used on this grade's board, so a coach can reuse a round's opponent and ground.
 async function getSavedRounds(db, gradeId) {
   const { results } = await db.prepare(
-    `SELECT round_name, opponent_name, match_date, venue_name
+    `SELECT round_name, opponent_name, match_date, match_time, venue_name
        FROM board_selections WHERE grade_id = ?1
        ORDER BY updated_at DESC LIMIT 40`
   ).bind(gradeId).all();
@@ -271,7 +278,7 @@ async function getSavedRounds(db, gradeId) {
 
 async function loadSelection(db, gradeId, round) {
   const selection = await db.prepare(
-    `SELECT id, grade_id, round_name, opponent_name, match_date, venue_name, status
+    `SELECT id, grade_id, round_name, opponent_name, match_date, match_time, venue_name, status
        FROM board_selections WHERE grade_id = ?1 AND round_name = ?2`
   ).bind(gradeId, round).first();
   if (!selection) return { selection: null, positions: {}, interchange: [] };
@@ -295,7 +302,7 @@ async function loadSelection(db, gradeId, round) {
 }
 
 async function saveSelection(db, payload) {
-  const { grade_id, round_name, opponent_name, match_date, venue_name, status, positions, interchange } = payload;
+  const { grade_id, round_name, opponent_name, match_date, match_time, venue_name, status, positions, interchange } = payload;
   if (!grade_id || !round_name) throw httpError("grade_id and round_name are required", 400);
   await assertGrade(db, grade_id);
   const allIds = [
@@ -312,14 +319,14 @@ async function saveSelection(db, payload) {
   if (existing) {
     selectionId = existing.id;
     await db.prepare(
-      `UPDATE board_selections SET opponent_name = ?1, match_date = ?2, venue_name = ?3, status = ?4, updated_at = CURRENT_TIMESTAMP WHERE id = ?5`
-    ).bind(opponent_name || null, match_date || null, venue_name || null, status || "saved", selectionId).run();
+      `UPDATE board_selections SET opponent_name = ?1, match_date = ?2, venue_name = ?3, status = ?4, match_time = ?5, updated_at = CURRENT_TIMESTAMP WHERE id = ?6`
+    ).bind(opponent_name || null, match_date || null, venue_name || null, status || "saved", match_time || null, selectionId).run();
     await db.prepare(`DELETE FROM board_selection_players WHERE selection_id = ?1`).bind(selectionId).run();
   } else {
     const result = await db.prepare(
-      `INSERT INTO board_selections (grade_id, round_name, opponent_name, match_date, venue_name, status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
-    ).bind(grade_id, round_name, opponent_name || null, match_date || null, venue_name || null, status || "saved").run();
+      `INSERT INTO board_selections (grade_id, round_name, opponent_name, match_date, venue_name, status, match_time)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+    ).bind(grade_id, round_name, opponent_name || null, match_date || null, venue_name || null, status || "saved", match_time || null).run();
     selectionId = result.meta.last_row_id;
   }
   const inserts = [];
