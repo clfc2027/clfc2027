@@ -556,7 +556,7 @@ async function syncPlayersForGame(db, apiKey, team, playhqGameId) {
       p.id,
       p.firstName,
       p.lastName,
-      p.playerNumber,
+      p.playerNumber ?? null,
       p.position || null,
       p.captainRole || null,
       p.isFillIn ? 1 : 0,
@@ -601,6 +601,11 @@ async function runSync(env) {
         continue;
       }
       const players = await syncPlayersForGame(db, env.PLAYHQ_API_KEY, team, fixture.playhq_game_id);
+      if (!players.length) {
+        // No team sheet in PlayHQ yet: leave the wheel alone and say so, as syncRelevantWheel does.
+        results.push({ team: team.team_name, status: "no_synced_team_sheet", gameId: fixture.playhq_game_id });
+        continue;
+      }
       await populateWheel(db, team, fixture.playhq_game_id, gradeLabel(team), players);
       results.push({ team: team.team_name, status: "synced", gameId: fixture.playhq_game_id, playerCount: players.length });
     } catch (e) {
@@ -1373,6 +1378,7 @@ var worker_default = {
   }
 };
 export {
-  worker_default as default
+  worker_default as default,
+  runSync
 };
 //# sourceMappingURL=worker.js.map
