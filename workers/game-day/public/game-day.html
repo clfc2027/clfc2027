@@ -31,6 +31,9 @@ h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { fon
 .brand-mark { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(160deg, var(--red), var(--red-dark)); display: grid; place-items: center; font: 900 16px/1 "Oswald", sans-serif; box-shadow: 0 0 0 3px rgba(255,255,255,.12); }
 .masthead h1 { font-size: 20px; letter-spacing: .06em; }
 .masthead .sub { color: var(--silver); font-size: 11px; letter-spacing: .1em; }
+.masthead-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.hub-link { color: #fff; background: var(--red); text-decoration: none; font-weight: 700; font-size: 13px; padding: 8px 14px; border-radius: 6px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+.hub-link:hover { background: var(--red-dark); }
 .updated { font-size: 11px; color: var(--silver); letter-spacing: .06em; text-align: right; }
 
 .team-banner { text-align: center; padding: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.03); margin-bottom: 18px; }
@@ -120,7 +123,10 @@ h1, .display, .grade, .jumper, .pname, .pos-label, .arc-label, .line-label { fon
         <div class="sub">COCKBURN LAKES FC &middot; 2027</div>
       </div>
     </div>
-    <div class="updated" id="updated"></div>
+    <div class="masthead-right">
+      <a class="hub-link" href="/">&larr; Return to hub</a>
+      <div class="updated" id="updated"></div>
+    </div>
   </header>
 
   <section class="team-banner" id="banner"></section>
