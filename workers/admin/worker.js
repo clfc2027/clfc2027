@@ -731,29 +731,6 @@ async function getGameDayTally(flexi, season) {
   return { season, tasks: DUTY_TASKS.map((t) => ({ key: t.key, label: t.label })), members };
 }
 
-// Every allocation for one season, in round order: who was on which duty, and for which grade.
-async function getGameDayHistory(flexi, season) {
-  await ensureDutiesTable(flexi);
-  const { results } = await flexi
-    .prepare(
-      `SELECT round_name, grade, task_key, slot, member_id, player_name FROM game_day_allocations
-        WHERE season_year = ?1
-        ORDER BY CAST(round_name AS INTEGER), round_name, grade, task_key, slot`
-    )
-    .bind(season)
-    .all();
-  const taskLabel = {};
-  for (const t of DUTY_TASKS) taskLabel[t.key] = t.label;
-  const rows = results.map((r) => ({
-    round: r.round_name,
-    grade: r.grade,
-    duty: taskLabel[r.task_key] || r.task_key,
-    member_id: r.member_id,
-    name: r.player_name,
-  }));
-  return { season, rows };
-}
-
 function getDashboard() {
 return `<!DOCTYPE html>
 <html>
@@ -863,6 +840,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .duty-input:disabled { background: #f2f2f2; color: #999; }
 .duty-input:disabled::placeholder { color: #aaa; }
 
+.duty-legend { font-size: 12px; margin: 0 0 10px; }
+.duty-key { padding: 0 4px; border-radius: 3px; }
+.duty-key.dup-2, .duty-input.dup-2 { background: #c8f5cc; }
+.duty-key.dup-3, .duty-input.dup-3 { background: #fff3a3; }
+.duty-key.dup-4, .duty-input.dup-4 { background: #f7b5b5; }
 /* Login screen */
 #login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(180deg, var(--blue) 0%, var(--blue-light) 100%); z-index: 100; }
 #login .card { width: min(340px, 100%); text-align: center; }
@@ -937,19 +919,13 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 <div class="card duties-card">
 <h3>📋 Game Day Duties</h3>
 <p>Pick a round, then whether it is a home or away game. Names come from the coaches board saved for that round, so a duty shows "coach not named team" until that coach has saved the team. Nothing is saved until you press Save duties.</p>
+<p class="duty-legend">Name colours: <span class="duty-key dup-2">green</span> 2nd duty this season, <span class="duty-key dup-3">yellow</span> 3rd, <span class="duty-key dup-4">red</span> 4th or more.</p>
 <div class="duty-tabs" id="dutyTabs"></div>
 <div class="duty-venue-row"><label for="dutyVenue">Round type</label><select id="dutyVenue"><option value="">Choose home or away</option><option value="home">Home game</option><option value="away">Away game</option></select></div>
 <div class="duty-title" id="dutyTitle">CLFC GAME DAY DUTIES</div>
 <div class="duty-grid" id="dutyGrid"></div>
 <div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutyRandomBtn">🎲 Randomise</button><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
 <div class="status" id="status-duties"></div>
-<h3 class="duty-tally-head">Duty tally (2027 season)</h3>
-<p>How many duties each person has been allocated so far this season. Use it to keep allocations fair.</p>
-<div id="dutyTally"></div>
-<h3 class="duty-tally-head">Allocation history (2027 season)</h3>
-<p>Every name and the duty it was allocated to, by round.</p>
-<input type="search" id="dutyHistoryFilter" class="duty-filter" placeholder="Filter by name">
-<div id="dutyHistory"></div>
 </div>
 
 <div class="card">
@@ -1045,7 +1021,6 @@ var MSG_NOT_NAMED_CLIENT = 'coach not named team';
 var dutyRound = '';
 var dutyData = null;
 var dutyDirty = false;
-var dutyHistoryRows = [];
 var dutyCounts = {};
 
 function dutyEsc(value) {
@@ -1136,6 +1111,7 @@ function renderDutyGrid() {
     html += '</div></div>';
   });
   document.getElementById('dutyGrid').innerHTML = html;
+  applyDutyHighlights();
 }
 
 // Typeahead: only the players on the board that supplies this duty. No board saved shows the message.
@@ -1177,6 +1153,7 @@ function pickDutyOption(btn) {
   input.setAttribute('data-member-id', String(opt.member_id));
   cell.querySelector('.duty-suggest').hidden = true;
   setDutyDirty(true);
+  applyDutyHighlights();
 }
 
 async function saveDutyRound() {
@@ -1225,61 +1202,45 @@ async function saveDutyRound() {
 async function loadDutyTally() {
   const res = await fetch('/api/game-day-tally?season=' + DUTY_SEASON);
   const data = await res.json().catch(function () { return {}; });
-  const box = document.getElementById('dutyTally');
-  if (!res.ok) {
-    box.innerHTML = '<p>' + dutyEsc(data.error || 'Could not load the tally') + '</p>';
-    return;
-  }
+  if (!res.ok) return;
   dutyCounts = {};
   data.members.forEach(function (m) {
     dutyCounts[String(m.member_id)] = { total: m.total, by_task: m.by_task || {} };
   });
-  if (!data.members.length) {
-    box.innerHTML = '<p>No duties recorded for ' + DUTY_SEASON + ' yet.</p>';
-  } else {
-    const head = '<tr><th>Name</th><th>Total</th>' + data.tasks.map(function (t) {
-      return '<th>' + dutyEsc(t.label) + '</th>';
-    }).join('') + '</tr>';
-    const body = data.members.map(function (m) {
-      const cells = data.tasks.map(function (t) { return '<td>' + (m.by_task[t.key] || 0) + '</td>'; }).join('');
-      return '<tr><td>' + dutyEsc(m.name) + '</td><td><strong>' + m.total + '</strong></td>' + cells + '</tr>';
-    }).join('');
-    box.innerHTML = '<div class="duty-tally"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
-  }
-  loadDutyHistory();
+  applyDutyHighlights();
 }
 
-async function loadDutyHistory() {
-  const res = await fetch('/api/game-day-history?season=' + DUTY_SEASON);
-  const data = await res.json().catch(function () { return {}; });
-  if (!res.ok) {
-    document.getElementById('dutyHistory').innerHTML = '<p>' + dutyEsc(data.error || 'Could not load the history') + '</p>';
-    return;
+// Colours each name by how many duties that person has this season, counting this round's
+// picks in the order they appear in the grid. 2nd = green, 3rd = yellow, 4th or more = red.
+function applyDutyHighlights() {
+  var inputs = document.querySelectorAll('.duty-input');
+  var savedThisRound = {};
+  if (dutyData && dutyData.grades) {
+    DUTY_GRADES.forEach(function (g) {
+      dutyData.grades[g.key].tasks.forEach(function (t) {
+        t.slots.forEach(function (c) {
+          if (c) savedThisRound[String(c.member_id)] = (savedThisRound[String(c.member_id)] || 0) + 1;
+        });
+      });
+    });
   }
-  dutyHistoryRows = data.rows || [];
-  renderDutyHistory();
-}
-
-function renderDutyHistory() {
-  const box = document.getElementById('dutyHistory');
-  const filter = document.getElementById('dutyHistoryFilter').value.trim().toLowerCase();
-  const rows = dutyHistoryRows.filter(function (r) {
-    return !filter || r.name.toLowerCase().indexOf(filter) >= 0;
-  });
-  if (!dutyHistoryRows.length) {
-    box.innerHTML = '<p>No allocations saved for ' + DUTY_SEASON + ' yet.</p>';
-    return;
+  var running = {};
+  for (var i = 0; i < inputs.length; i++) {
+    var inp = inputs[i];
+    inp.classList.remove('dup-2', 'dup-3', 'dup-4');
+    inp.removeAttribute('title');
+    if (inp.disabled) continue;
+    var key = inp.getAttribute('data-member-id');
+    if (!key) continue;
+    var season = dutyCounts[key] ? dutyCounts[key].total : 0;
+    var base = season - (savedThisRound[key] || 0);
+    running[key] = (running[key] || 0) + 1;
+    var n = base + running[key];
+    if (n >= 4) inp.classList.add('dup-4');
+    else if (n === 3) inp.classList.add('dup-3');
+    else if (n === 2) inp.classList.add('dup-2');
+    if (n >= 2) inp.setAttribute('title', 'Duty ' + n + ' this season');
   }
-  if (!rows.length) {
-    box.innerHTML = '<p>No allocations match that name.</p>';
-    return;
-  }
-  const body = rows.map(function (r) {
-    const gradeLabel = dutyLabelFor(DUTY_GRADES, r.grade);
-    return '<tr><td>Rd ' + dutyEsc(r.round) + '</td><td>' + dutyEsc(gradeLabel) + '</td><td>' + dutyEsc(r.duty) + '</td><td>' + dutyEsc(r.name) + '</td></tr>';
-  }).join('');
-  box.innerHTML = '<p>' + rows.length + ' of ' + dutyHistoryRows.length + ' allocations shown</p>' +
-    '<div class="duty-tally"><table><thead><tr><th>Round</th><th>Grade</th><th>Duty</th><th>Name</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
 function dutyShuffle(list) {
@@ -1355,6 +1316,7 @@ function randomiseDuties() {
     });
   });
   setDutyDirty(true);
+  applyDutyHighlights();
   if (short.length) showStatus('duties', 'Not enough players on the boards for: ' + short.join(', '), 'error');
   else showStatus('duties', 'Randomised Round ' + dutyRound + ' (fewest duties first). Review, then press Save duties.', 'success');
 }
@@ -1378,6 +1340,7 @@ document.getElementById('dutyGrid').addEventListener('input', function (e) {
   if (!t.classList.contains('duty-input')) return;
   t.setAttribute('data-member-id', '');
   setDutyDirty(true);
+  applyDutyHighlights();
   showDutySuggestions(t);
 });
 document.getElementById('dutyGrid').addEventListener('click', function (e) {
@@ -1385,7 +1348,6 @@ document.getElementById('dutyGrid').addEventListener('click', function (e) {
   if (opt) pickDutyOption(opt);
 });
 document.getElementById('dutySaveBtn').addEventListener('click', saveDutyRound);
-document.getElementById('dutyHistoryFilter').addEventListener('input', renderDutyHistory);
 
 function getSelected() {
 const sel = document.getElementById('teamSelect');
@@ -1883,14 +1845,6 @@ return json({ error: e.message }, e.status || 500);
 if (path === "/api/game-day-tally" && request.method === "GET") {
 try {
 return json(await getGameDayTally(needFlexi(env), seasonOf(url.searchParams.get("season"))));
-} catch (e) {
-return json({ error: e.message }, e.status || 500);
-}
-}
-
-if (path === "/api/game-day-history" && request.method === "GET") {
-try {
-return json(await getGameDayHistory(needFlexi(env), seasonOf(url.searchParams.get("season"))));
 } catch (e) {
 return json({ error: e.message }, e.status || 500);
 }
