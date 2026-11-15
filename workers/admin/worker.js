@@ -941,7 +941,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 <div class="duty-venue-row"><label for="dutyVenue">Round type</label><select id="dutyVenue"><option value="">Choose home or away</option><option value="home">Home game</option><option value="away">Away game</option></select></div>
 <div class="duty-title" id="dutyTitle">CLFC GAME DAY DUTIES</div>
 <div class="duty-grid" id="dutyGrid"></div>
-<div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
+<div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutyRandomBtn">🎲 Randomise</button><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
 <div class="status" id="status-duties"></div>
 <h3 class="duty-tally-head">Duty tally (2027 season)</h3>
 <p>How many duties each person has been allocated so far this season. Use it to keep allocations fair.</p>
@@ -1046,6 +1046,7 @@ var dutyRound = '';
 var dutyData = null;
 var dutyDirty = false;
 var dutyHistoryRows = [];
+var dutyCounts = {};
 
 function dutyEsc(value) {
   return String(value == null ? '' : value)
@@ -1229,6 +1230,10 @@ async function loadDutyTally() {
     box.innerHTML = '<p>' + dutyEsc(data.error || 'Could not load the tally') + '</p>';
     return;
   }
+  dutyCounts = {};
+  data.members.forEach(function (m) {
+    dutyCounts[String(m.member_id)] = { total: m.total, by_task: m.by_task || {} };
+  });
   if (!data.members.length) {
     box.innerHTML = '<p>No duties recorded for ' + DUTY_SEASON + ' yet.</p>';
   } else {
@@ -1277,6 +1282,84 @@ function renderDutyHistory() {
     '<div class="duty-tally"><table><thead><tr><th>Round</th><th>Grade</th><th>Duty</th><th>Name</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
+function dutyShuffle(list) {
+  var a = list.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+// Fills every required slot from the boards that supply it, without repeating a person within a grade.
+// People with the fewest duties so far this season are picked first (ties broken at random).
+// A round that is already saved does not count its own picks against people.
+// Fills the grid only; nothing is saved until Save duties is pressed.
+function randomiseDuties() {
+  if (!dutyRound) return showStatus('duties', 'Pick a round first', 'error');
+  if (!dutyData || !dutyData.venue) return showStatus('duties', 'Choose home or away for this round first', 'error');
+
+  var base = {};
+  function baseOf(id) {
+    var key = String(id);
+    if (!base[key]) base[key] = { total: 0, by_task: {} };
+    return base[key];
+  }
+  Object.keys(dutyCounts).forEach(function (key) {
+    base[key] = { total: dutyCounts[key].total, by_task: Object.assign({}, dutyCounts[key].by_task) };
+  });
+  DUTY_GRADES.forEach(function (g) {
+    dutyData.grades[g.key].tasks.forEach(function (t) {
+      t.slots.forEach(function (card) {
+        if (!card) return;
+        var c = baseOf(card.member_id);
+        c.total -= 1;
+        c.by_task[t.key] = (c.by_task[t.key] || 0) - 1;
+      });
+    });
+  });
+
+  var short = [];
+  DUTY_GRADES.forEach(function (g) {
+    var grade = dutyData.grades[g.key];
+    var used = {};
+    var tasks = grade.tasks.filter(function (t) { return t.required && t.options.length; });
+    // Fill the scarcest pools first so a small board is not used up by other duties.
+    tasks.sort(function (a, b) { return a.options.length - b.options.length; });
+    tasks.forEach(function (task) {
+      var pool = dutyShuffle(task.options).sort(function (x, y) {
+        var cx = baseOf(x.member_id), cy = baseOf(y.member_id);
+        if (cx.total !== cy.total) return cx.total - cy.total;
+        return (cx.by_task[task.key] || 0) - (cy.by_task[task.key] || 0);
+      });
+      for (var i = 0; i < task.slots.length; i++) {
+        var input = document.querySelector('.duty-input[data-grade="' + g.key + '"][data-task="' + task.key + '"][data-slot="' + i + '"]');
+        if (!input) continue;
+        var pick = null;
+        while (pool.length && !pick) {
+          var cand = pool.shift();
+          if (!used[cand.member_id]) pick = cand;
+        }
+        if (pick) {
+          used[pick.member_id] = true;
+          var c = baseOf(pick.member_id);
+          c.total += 1;
+          c.by_task[task.key] = (c.by_task[task.key] || 0) + 1;
+        } else {
+          short.push(g.label + ' ' + task.label + ' ' + (i + 1));
+        }
+        input.value = pick ? pick.name : '';
+        input.setAttribute('data-member-id', pick ? String(pick.member_id) : '');
+        input.parentNode.querySelector('.duty-suggest').hidden = true;
+      }
+    });
+  });
+  setDutyDirty(true);
+  if (short.length) showStatus('duties', 'Not enough players on the boards for: ' + short.join(', '), 'error');
+  else showStatus('duties', 'Randomised Round ' + dutyRound + ' (fewest duties first). Review, then press Save duties.', 'success');
+}
+
+document.getElementById('dutyRandomBtn').addEventListener('click', randomiseDuties);
 document.getElementById('dutyTabs').addEventListener('click', function (e) {
   const r = e.target.getAttribute('data-round');
   if (r) loadDutyRound(r, null, false);
