@@ -8,7 +8,6 @@ import { passcodeState } from "../../shared/auth.js";
 
 const PERTH_OFFSET_MS = 8 * 60 * 60 * 1000;
 const CLUB_NAME = 'Cockburn Lakes';
-const MULTI_SHEET_MSG = 'You are listed on more than one team sheet this round, so we cannot tell which team you played for. Please contact the club admin.';
 
 const ASSET_KEYS = [
   'club-logo/clfc-player-player-logo.png',
@@ -118,13 +117,12 @@ async function findPlayerSheets(db, member, rounds) {
   return hits;
 }
 
-// Returns { hit } for the one sheet the member is on, or { failure } with the response to send back.
-async function resolvePlayerSheet(db, member) {
+// Every sheet the member is on this round, or a failure response when there are none.
+async function resolvePlayerSheets(db, member) {
   const { rounds } = await cockburnRounds(db);
   const hits = await findPlayerSheets(db, member, rounds);
   if (hits.length === 0) return { failure: fail(notPlayed(member), 403) };
-  if (hits.length > 1) return { failure: fail(MULTI_SHEET_MSG, 409) };
-  return { hit: hits[0] };
+  return { hits };
 }
 
 async function handleLogin(env, body) {
@@ -133,23 +131,31 @@ async function handleLogin(env, body) {
   const member = await findMemberByPin(env.DB, body.pin);
   if (!member) return fail('PIN not recognised.', 401);
 
-  const { hit, failure } = await resolvePlayerSheet(env.DB, member);
+  const { hits, failure } = await resolvePlayerSheets(env.DB, member);
   if (failure) return failure;
 
-  const { round, players, me } = hit;
-  const existing = await env.DB.prepare(
-    'SELECT 1 FROM players_player_votes WHERE round_key = ? AND voter_member_id = ?'
-  ).bind(round.round_key, member.id).first();
-  const win = windowFor(round.round_key);
+  const sheets = [];
+  for (const { round, players, me } of hits) {
+    const existing = await env.DB.prepare(
+      'SELECT 1 FROM players_player_votes WHERE round_key = ? AND team_id = ? AND voter_member_id = ?'
+    ).bind(round.round_key, round.team_id, member.id).first();
+    const win = windowFor(round.round_key);
+    sheets.push({
+      game_id: round.game_id,
+      team_id: round.team_id,
+      team_name: round.team_name,
+      grade_name: round.grade_name,
+      match_date: round.round_key,
+      players: players.filter(p => p !== me),
+      voted: !!existing,
+      window_open: win.open,
+      window_text: win.text,
+    });
+  }
 
   return ok({
     member: { first_name: member.first_name, last_name: member.last_name },
-    team: { team_name: round.team_name, grade_name: round.grade_name },
-    game: { game_id: round.game_id, match_date: round.round_key },
-    players: players.filter(p => p !== me),
-    voted: !!existing,
-    window_open: win.open,
-    window_text: win.text,
+    sheets,
   });
 }
 
@@ -159,8 +165,13 @@ async function handleVote(env, body) {
   const member = await findMemberByPin(env.DB, body.pin);
   if (!member) return fail('PIN not recognised.', 401);
 
-  const { hit, failure } = await resolvePlayerSheet(env.DB, member);
+  const { hits, failure } = await resolvePlayerSheets(env.DB, member);
   if (failure) return failure;
+
+  // One vote per team sheet: the game says which sheet this ballot is for.
+  const gameId = typeof body.game_id === 'string' ? body.game_id : '';
+  const hit = gameId ? hits.find(h => h.round.game_id === gameId) : (hits.length === 1 ? hits[0] : null);
+  if (!hit) return fail('Choose which team you are voting for.');
   const { round, players, me } = hit;
 
   const candidate = body.candidate_playhq_player_id;
@@ -171,7 +182,7 @@ async function handleVote(env, body) {
     return fail("That player is not on your team sheet.");
   }
 
-  // UNIQUE(round_key, voter_member_id) makes a second vote a no-op
+  // UNIQUE(round_key, team_id, voter_member_id) makes a second vote for the same team a no-op
   const res = await env.DB.prepare(`
     INSERT OR IGNORE INTO players_player_votes
       (season_id, round_key, grade_name, game_id, team_id, voter_member_id, voter_playhq_player_id, candidate_playhq_player_id)
@@ -180,7 +191,7 @@ async function handleVote(env, body) {
       member.id, me.playhq_player_id, candidate)
     .run();
 
-  if (res.meta.changes === 0) return fail('You have already voted this round.', 409);
+  if (res.meta.changes === 0) return fail('You have already voted for this team this round.', 409);
   return ok({});
 }
 
@@ -529,9 +540,10 @@ function login() {
   api('/login', { pin: pin }).then(function (d) {
     $('pin-btn').disabled = false;
     if (!d.ok) { setMsg($('pin-msg'), d.error || 'PIN not recognised.', 'err'); return; }
-    session = { pin: pin, member: d.member, players: d.players || [], voted: !!d.voted };
+    session = { pin: pin, member: d.member, sheets: d.sheets || [], current: 0 };
+    session.current = firstUnvoted();
     $('pin-section').classList.add('hidden');
-    renderVote(d);
+    renderVote();
     $('vote-section').classList.remove('hidden');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -544,15 +556,35 @@ function addPill(parent, text) {
   parent.appendChild(s);
 }
 
-function renderVote(d) {
+function allVoted() {
+  return session.sheets.every(function (s) { return s.voted; });
+}
+
+function firstUnvoted() {
+  for (var i = 0; i < session.sheets.length; i++) {
+    if (!session.sheets[i].voted) return i;
+  }
+  return 0;
+}
+
+// Shows one ballot per team sheet the member is on. A team button switches between them.
+function renderVote() {
   $('welcome').textContent = 'Welcome, ' + session.member.first_name + ' ' + session.member.last_name;
+  if (allVoted()) { showDone(); return; }
 
   var pills = $('team-pills');
   pills.innerHTML = '';
-  if (d.team) addPill(pills, d.team.team_name);
-  if (d.game && d.game.match_date) addPill(pills, 'Round ' + d.game.match_date);
+  session.sheets.forEach(function (t, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pill' + (i === session.current ? ' active' : '');
+    b.textContent = t.team_name + ' · Round ' + t.match_date + (t.voted ? ' ✓' : '');
+    b.onclick = function () { session.current = i; renderVote(); };
+    pills.appendChild(b);
+  });
 
-  $('window-info').textContent = d.window_text || '';
+  var s = session.sheets[session.current];
+  $('window-info').textContent = s.window_text || '';
 
   var sel = $('candidate');
   sel.innerHTML = '';
@@ -561,19 +593,19 @@ function renderVote(d) {
   placeholder.textContent = 'Select a player';
   sel.appendChild(placeholder);
 
-  session.players.forEach(function (p) {
+  s.players.forEach(function (p) {
     var o = document.createElement('option');
     o.value = p.playhq_player_id;
     o.textContent = p.first_name + ' ' + p.last_name;
     sel.appendChild(o);
   });
 
-  var canVote = d.window_open && !session.voted && session.players.length > 0;
+  var canVote = s.window_open && !s.voted && s.players.length > 0;
   $('vote-form').classList.toggle('hidden', !canVote);
 
-  if (session.voted) { showDone(); return; }
-  if (!d.window_open) setMsg($('vote-msg'), 'Voting is closed for this round.', 'err');
-  else $('vote-msg').textContent = '';
+  $('vote-msg').textContent = '';
+  if (s.voted) $('vote-msg').textContent = 'Your vote for ' + s.team_name + ' is in.';
+  else if (!s.window_open) setMsg($('vote-msg'), 'Voting is closed for this round.', 'err');
 }
 
 function showDone() {
@@ -584,15 +616,17 @@ function showDone() {
 // ---- Step 2: Vote ----
 function submitVote() {
   $('vote-msg').textContent = '';
+  var s = session.sheets[session.current];
   var candidate = $('candidate').value;
   if (!candidate) { setMsg($('vote-msg'), 'Please select a player.', 'err'); return; }
 
   $('vote-btn').disabled = true;
-  api('/vote', { pin: session.pin, candidate_playhq_player_id: candidate }).then(function (d) {
+  api('/vote', { pin: session.pin, game_id: s.game_id, candidate_playhq_player_id: candidate }).then(function (d) {
     $('vote-btn').disabled = false;
     if (!d.ok) { setMsg($('vote-msg'), d.error || 'Vote not recorded.', 'err'); return; }
-    session.voted = true;
-    showDone();
+    s.voted = true;
+    session.current = firstUnvoted();
+    renderVote();
   });
 }
 
