@@ -48,4 +48,13 @@ service = "fgk"
 binding = "ADMIN"
 service = "admin"
 
+# TEST (remove after testing): FGK clone reading FLEXI, and the 2026 sync dashboard
+[[services]]
+binding = "FGKTEST"
+service = "fgk-test"
+
+[[services]]
+binding = "SYNC2026"
+service = "fgk-2026-sync"
+
 # Secret set in the dashboard, not in this file: SESSION_SECRET

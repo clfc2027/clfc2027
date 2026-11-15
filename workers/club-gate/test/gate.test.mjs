@@ -170,6 +170,10 @@ test("sessions stop being valid after 30 days", async () => {
 
 test("path to service mapping is exact on tool prefixes", () => {
   assert.equal(targetBinding("/fines"), "FINES");
+  assert.equal(targetBinding("/fgk-test"), "FGKTEST");
+  assert.equal(targetBinding("/fgk-test/api/grades"), "FGKTEST");
+  assert.equal(targetBinding("/sync2026"), "SYNC2026");
+  assert.equal(targetBinding("/fgk-testing"), "HUB");
   assert.equal(targetBinding("/finesx"), "HUB");
   assert.equal(targetBinding("/league"), "GAMEDAY");
   assert.equal(targetBinding("/leaguex"), "HUB");

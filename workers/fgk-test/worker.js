@@ -899,8 +899,8 @@ function getPage() {
 </footer>
 
 <script type="module">
-  const BASE = location.pathname.indexOf('/fgk') === 0 ? '/fgk' : '';
-  import { WheelSpinner } from '/fgk/wheel-spinner.js';
+  const BASE = location.pathname.indexOf('/fgk-test') === 0 ? '/fgk-test' : '';
+  import { WheelSpinner } from '/fgk-test/wheel-spinner.js';
 
   let member = null;
   let currentTeamId = null;
@@ -1253,8 +1253,8 @@ __name2(getPage, "getPage");
 var worker_default = {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Served at /fgk on the club domain and at the workers.dev root; both map to the same routes.
-    const path = url.pathname.replace(/^\/fgk(?=\/|$)/, "") || "/";
+    // Served at /fgk-test on the club domain (behind the member gate).
+    const path = url.pathname.replace(/^\/fgk-test(?=\/|$)/, "") || "/";
     const db = dualDb(env);
     if (path === "/") return new Response(getPage(), { headers: { "Content-Type": "text/html" } });
     if (path === "/wheel-spinner.js") return new Response(WHEEL_SPINNER_JS, { headers: { "Content-Type": "application/javascript" } });

@@ -28,6 +28,8 @@ const TOOLS = [
   { prefix: "/colts", binding: "GAMEDAY" },
   { prefix: "/reserves", binding: "GAMEDAY" },
   { prefix: "/thirds", binding: "GAMEDAY" },
+  { prefix: "/fgk-test", binding: "FGKTEST" },
+  { prefix: "/sync2026", binding: "SYNC2026" },
 ];
 
 export function targetBinding(pathname) {

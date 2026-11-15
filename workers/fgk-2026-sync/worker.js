@@ -48,10 +48,11 @@ const PAGE = `<!DOCTYPE html>
 
 <script>
 const $ = (id) => document.getElementById(id);
+const BASE = location.pathname.indexOf('/sync2026') === 0 ? '/sync2026' : '';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 async function post(path, body) {
-  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, passcode: $('pass').value }) });
+  const res = await fetch(BASE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, passcode: $('pass').value }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
   return data;
@@ -179,7 +180,8 @@ async function activeRound(db) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    // Served at /sync2026 on the club domain (behind the member gate).
+    const path = url.pathname.replace(/^\/sync2026(?=\/|$)/, "") || "/";
 
     if (path === "/" && request.method === "GET") {
       return new Response(PAGE, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
