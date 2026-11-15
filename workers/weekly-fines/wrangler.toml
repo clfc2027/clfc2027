@@ -1,0 +1,23 @@
+# weekly-fines (weekly $2 fines), compiled build as deployed on Cloudflare.
+name = "weekly-fines"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# Member PIN check only (member_directory). Nothing is written here.
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors"
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# Fines live here (weekly_fines, fines_pin_attempts). Shared database with coaches-board, new tables only.
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# Secret set in the dashboard, not in this file: ADMIN_PASSCODE

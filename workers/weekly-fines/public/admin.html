@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Fines admin | Cockburn Lakes FC</title>
+<style>
+  :root { --navy: #14213d; --ink: #1d1d1f; --muted: #5b6270; --line: #e3e6ec; --bg: #f5f6f8; --red: #b42318; --green: #067647; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--navy); color: #fff; padding: 16px; }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  section { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input { font: inherit; padding: 9px; border: 1px solid #c9ced8; border-radius: 6px; width: 220px; }
+  button { font: inherit; border: 0; padding: 7px 12px; border-radius: 6px; cursor: pointer; background: var(--navy); color: #fff; font-weight: 600; }
+  button.secondary { background: #eef0f4; color: var(--ink); }
+  button.danger { background: var(--red); }
+  button:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .status-open { color: var(--red); font-weight: 600; }
+  .status-paid { color: var(--green); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .msg { margin-top: 10px; font-weight: 600; }
+  .msg.err { color: var(--red); }
+  .msg.ok { color: var(--green); }
+  .filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header><h1>Weekly Fines admin</h1></header>
+<main>
+  <section id="login">
+    <label for="pass">Admin passcode</label>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input id="pass" type="password" inputmode="numeric" autocomplete="off">
+      <button id="load" type="button">Load fines</button>
+    </div>
+    <div class="msg err" id="login-msg"></div>
+  </section>
+
+  <section id="list" hidden>
+    <div class="filters">
+      <button class="secondary" id="show-open" type="button">Open</button>
+      <button class="secondary" id="show-paid" type="button">Paid</button>
+      <button class="secondary" id="show-all" type="button">All</button>
+      <button class="secondary" id="refresh" type="button">Refresh</button>
+      <span class="muted" id="summary"></span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Fined</th><th>Reason</th><th>Nominated by</th><th>Week</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="msg" id="msg" role="status"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var passcode = "";
+  var fines = [];
+  var filter = "open";
+
+  function el(tag, text, cls) {
+    var n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    if (cls) n.className = cls;
+    return n;
+  }
+
+  function post(path, body) {
+    body.adminPin = passcode;
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok || !d.ok) throw new Error(d.error || "Request failed");
+        return d;
+      });
+    });
+  }
+
+  function render() {
+    var rows = $("rows");
+    rows.textContent = "";
+    var shown = fines.filter(function (f) {
+      return filter === "all" || f.status === filter;
+    });
+    shown.forEach(function (f) {
+      var tr = document.createElement("tr");
+      tr.appendChild(el("td", f.target_name));
+      tr.appendChild(el("td", f.reason));
+      tr.appendChild(el("td", f.nominator, "muted"));
+      tr.appendChild(el("td", f.week_start));
+      tr.appendChild(el("td", f.status === "open" ? "Open" : "Paid " + (f.paid_at || "").slice(0, 10),
+        f.status === "open" ? "status-open" : "status-paid"));
+
+      var actions = el("td");
+      var box = el("div", null, "actions");
+      if (f.status === "open") {
+        box.appendChild(actionButton("Mark paid", "paid", f.id));
+      } else {
+        box.appendChild(actionButton("Reopen", "reopen", f.id, "secondary"));
+      }
+      box.appendChild(actionButton("Delete", "delete", f.id, "danger"));
+      actions.appendChild(box);
+      tr.appendChild(actions);
+      rows.appendChild(tr);
+    });
+    if (!shown.length) {
+      var empty = document.createElement("tr");
+      empty.appendChild(el("td", "No fines in this view.", "muted"));
+      empty.firstChild.colSpan = 6;
+      rows.appendChild(empty);
+    }
+    var open = fines.filter(function (f) { return f.status === "open"; });
+    var owed = open.length * 2;
+    $("summary").textContent = open.length + " open ($" + owed + " owed), " +
+      (fines.length - open.length) + " paid";
+  }
+
+  function actionButton(label, action, id, cls) {
+    var b = el("button", label, cls || null);
+    b.type = "button";
+    b.addEventListener("click", function () {
+      if (action === "delete" && !confirm("Delete this fine permanently? Use this only for mistakes.")) return;
+      b.disabled = true;
+      post("/api/admin/fines/" + id + "/" + action, {})
+        .then(function () { return load(); })
+        .catch(function (err) {
+          $("msg").textContent = err.message;
+          $("msg").className = "msg err";
+          b.disabled = false;
+        });
+    });
+    return b;
+  }
+
+  function load() {
+    $("msg").textContent = "";
+    return post("/api/admin/fines", {})
+      .then(function (d) {
+        fines = d.fines;
+        $("login").hidden = true;
+        $("list").hidden = false;
+        render();
+      })
+      .catch(function (err) {
+        $("login-msg").textContent = err.message;
+      });
+  }
+
+  $("load").addEventListener("click", function () {
+    passcode = $("pass").value;
+    $("login-msg").textContent = "";
+    load();
+  });
+  $("pass").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") $("load").click();
+  });
+  $("show-open").addEventListener("click", function () { filter = "open"; render(); });
+  $("show-paid").addEventListener("click", function () { filter = "paid"; render(); });
+  $("show-all").addEventListener("click", function () { filter = "all"; render(); });
+  $("refresh").addEventListener("click", function () { load(); });
+})();
+</script>
+</body>
+</html>
