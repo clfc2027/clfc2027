@@ -58,10 +58,10 @@ export function cleanReason(raw) {
     .trim();
 }
 
-function json(data, status = 200) {
+function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...SECURITY_HEADERS },
+    headers: { "Content-Type": "application/json; charset=utf-8", ...SECURITY_HEADERS, ...extraHeaders },
   });
 }
 
@@ -341,7 +341,8 @@ export default {
 
       if (pathname === "/api/fines" && method === "GET") {
         await ensureSchema(env.FLEXI);
-        return json(await listOpenFines(env.FLEXI));
+        // Public, read-only totals: the club hub reads this from another origin.
+        return json(await listOpenFines(env.FLEXI), 200, { "Access-Control-Allow-Origin": "*" });
       }
       if (pathname === "/api/fines" && method === "POST") {
         return await nominate(request, env);
