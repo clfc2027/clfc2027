@@ -5,7 +5,7 @@ const app = document.getElementById("app");
 
 let state = {
   grades: [],
-  teamId: "",
+  gradeId: "",
   round: "",
   opponent: "",
   matchDate: "",
@@ -20,12 +20,12 @@ let state = {
   gateError: "",
 };
 
-function pinKey(teamId) {
-  return "coachPin:" + teamId;
+function pinKey(gradeId) {
+  return "coachPin:" + gradeId;
 }
 
 function currentGrade() {
-  return state.grades.find((g) => String(g.team_id) === String(state.teamId));
+  return state.grades.find((g) => String(g.grade_id) === String(state.gradeId));
 }
 
 function allSelectedIds() {
@@ -77,21 +77,21 @@ async function unlock(pin, silent) {
   state.busy = true;
   state.gateError = "";
   try {
-    await postJson("/api/coach/verify", { team_id: state.teamId, pin: pin });
+    await postJson("/api/coach/verify", { grade_id: state.gradeId, pin: pin });
     state.pin = pin;
     state.unlocked = true;
-    sessionStorage.setItem(pinKey(state.teamId), pin);
+    sessionStorage.setItem(pinKey(state.gradeId), pin);
   } catch (e) {
     state.pin = "";
     state.unlocked = false;
-    sessionStorage.removeItem(pinKey(state.teamId));
+    sessionStorage.removeItem(pinKey(state.gradeId));
     if (!silent) state.gateError = e.message;
   }
   state.busy = false;
 }
 
 function lockBoard() {
-  sessionStorage.removeItem(pinKey(state.teamId));
+  sessionStorage.removeItem(pinKey(state.gradeId));
   state.unlocked = false;
   state.pin = "";
   state.gateError = "";
@@ -110,7 +110,7 @@ async function prepareGrade() {
   state.unlocked = false;
   state.pin = "";
   state.gateError = "";
-  const stored = sessionStorage.getItem(pinKey(state.teamId));
+  const stored = sessionStorage.getItem(pinKey(state.gradeId));
   if (stored) await unlock(stored, true);
 }
 
@@ -120,7 +120,7 @@ async function init() {
     const { grades } = await api("/api/grades");
     state.grades = grades;
     if (grades.length) {
-      state.teamId = String(grades[0].team_id);
+      state.gradeId = String(grades[0].grade_id);
       await prepareGrade();
     }
   } catch (e) {
@@ -131,7 +131,7 @@ async function init() {
 
 function gateHtml(grade) {
   const disabled = !grade || state.busy ? " disabled" : "";
-  const label = grade ? grade.grade_name : "No 2027 grades yet";
+  const label = grade ? grade.grade_name : "No boards yet";
   return \`
     <div class="gate-card">
       <div class="club">COACHES ONLY</div>
@@ -172,9 +172,9 @@ function render() {
         <select id="gradeSelect"\${state.grades.length ? "" : " disabled"}>
           \${state.grades.length
             ? state.grades
-                .map((g) => \`<option value="\${g.team_id}" \${String(g.team_id) === String(state.teamId) ? "selected" : ""}>\${g.grade_name}</option>\`)
+                .map((g) => \`<option value="\${g.grade_id}" \${String(g.grade_id) === String(state.gradeId) ? "selected" : ""}>\${g.grade_name}</option>\`)
                 .join("")
-            : '<option value="">No 2027 grades yet</option>'}
+            : '<option value="">No boards yet</option>'}
         </select>
       </div>
       \${state.unlocked ? \`
@@ -255,7 +255,7 @@ function bindEvents() {
   const gradeSelect = document.getElementById("gradeSelect");
   if (gradeSelect) {
     gradeSelect.onchange = async (e) => {
-      state.teamId = e.target.value;
+      state.gradeId = e.target.value;
       await prepareGrade();
       render();
     };
@@ -424,14 +424,21 @@ function closeSelector() {
   state.activeSlot = null;
 }
 
+function escapeHtml(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+
+
 async function runPlayerSearch(q) {
   const box = document.getElementById("selectorResults");
   if (!q || q.trim().length < 2) {
-    box.innerHTML = '<div class="empty">Keep typing\\u2027 (2+ letters)</div>';
+    box.innerHTML = '<div class="empty">Keep typing… (2+ letters)</div>';
     return;
   }
   try {
-    const { players } = await api("/api/players?team_id=" + state.teamId + "&search=" + encodeURIComponent(q.trim()));
+    const { players } = await api("/api/players?grade_id=" + encodeURIComponent(state.gradeId) + "&search=" + encodeURIComponent(q.trim()));
     const already = allSelectedIds();
     const filtered = players.filter((p) => !already.includes(p.member_id));
     if (!filtered.length) {
@@ -439,10 +446,7 @@ async function runPlayerSearch(q) {
       return;
     }
     box.innerHTML = filtered
-      .map(
-        (p) =>
-          \`<div data-mid="\${p.member_id}">\${p.name}\${p.jumper ? " \\u2014 #" + p.jumper : ""}</div>\`
-      )
+      .map((p) => \`<div data-mid="\${p.member_id}">\${escapeHtml(p.name)}\${p.jumper ? " — #" + escapeHtml(p.jumper) : ""}</div>\`)
       .join("");
     box.querySelectorAll("[data-mid]").forEach((row, i) => {
       row.onclick = () => {
@@ -458,45 +462,42 @@ async function runPlayerSearch(q) {
       };
     });
   } catch (e) {
-    box.innerHTML = '<div class="empty">Search failed: ' + e.message + "</div>";
+    box.innerHTML = '<div class="empty">Search failed: ' + escapeHtml(e.message) + "</div>";
   }
 }
 
 async function loadRoundSuggestions() {
-  if (!state.teamId) return;
+  if (!state.gradeId) return;
   try {
-    const { rounds } = await api("/api/rounds?team_id=" + state.teamId);
+    const { rounds } = await api("/api/rounds?grade_id=" + encodeURIComponent(state.gradeId));
     const box = document.getElementById("roundSuggest");
     if (!rounds.length) return;
     box.innerHTML = rounds
-      .map(
-        (r) =>
-          \`<div data-round="\${escapeAttr(r.round_name)}" data-opp="\${escapeAttr(r.opponent_name || "")}" data-date="\${escapeAttr(r.game_date || "")}" data-venue="\${escapeAttr(r.venue_name || "")}">\${r.round_name}\${r.opponent_name ? " \\u2014 vs " + r.opponent_name : ""}</div>\`
-      )
+      .map((r) => \`<div data-round="\${escapeAttr(r.round_name)}" data-opp="\${escapeAttr(r.opponent_name || "")}" data-date="\${escapeAttr((r.match_date || "").slice(0, 10))}" data-venue="\${escapeAttr(r.venue_name || "")}">\${escapeHtml(r.round_name)}\${r.opponent_name ? " · " + escapeHtml(r.opponent_name) : ""}</div>\`)
       .join("");
     box.style.display = "block";
     box.querySelectorAll("[data-round]").forEach((row) => {
       row.onclick = () => {
         state.round = row.dataset.round;
         state.opponent = row.dataset.opp || state.opponent;
-        state.matchDate = (row.dataset.date || "").slice(0, 10);
+        state.matchDate = row.dataset.date || "";
         state.venue = row.dataset.venue || state.venue;
         box.style.display = "none";
         render();
       };
     });
   } catch (e) {
-    // silent \\u2014 suggestions are optional
+    // silent — suggestions are optional
   }
 }
 
 async function loadSelection() {
-  if (!state.teamId || !state.round) {
+  if (!state.gradeId || !state.round.trim()) {
     setStatus("Choose a grade and round first.", "err");
     return;
   }
   try {
-    const data = await api("/api/team?team_id=" + state.teamId + "&round=" + encodeURIComponent(state.round));
+    const data = await api("/api/team?grade_id=" + encodeURIComponent(state.gradeId) + "&round=" + encodeURIComponent(state.round.trim()));
     if (!data.selection) {
       setStatus("No saved team found for that round yet.", "");
       return;
@@ -514,42 +515,26 @@ async function loadSelection() {
 }
 
 async function saveSelection() {
-  if (!state.teamId || !state.round.trim()) {
+  if (!state.gradeId || !state.round.trim()) {
     setStatus("Grade and round are required before saving.", "err");
     return;
   }
-  if (!state.opponent.trim()) {
-    setStatus("Enter an opponent before saving.", "err");
-    return;
-  }
-  const grade = currentGrade();
   try {
-    const res = await api("/api/team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        season_id: grade ? grade.season_id || null : null,
-        team_id: state.teamId,
-        round_name: state.round.trim(),
-        opponent_name: state.opponent.trim(),
-        match_date: state.matchDate || null,
-        venue_name: state.venue || null,
-        status: "saved",
-        positions: state.positions,
-        interchange: state.interchange,
-      }),
+    await postJson("/api/team", {
+      grade_id: state.gradeId,
+      round_name: state.round.trim(),
+      opponent_name: state.opponent.trim() || null,
+      match_date: state.matchDate || null,
+      venue_name: state.venue || null,
+      status: "saved",
+      positions: state.positions,
+      interchange: state.interchange,
     });
     setStatus("Team saved.", "ok");
   } catch (e) {
     setStatus("Save failed: " + e.message, "err");
   }
 }
-
-function escapeHtml(v) {
-  return String(v == null ? "" : v)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 
 
 init();
