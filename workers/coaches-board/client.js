@@ -1,6 +1,8 @@
 export const JS = `const POSITIONS = window.__POSITIONS__;
 const IC_COUNT = window.__INTERCHANGE_COUNT__;
 const HUB_URL = window.__HUB_URL__ || "/";
+// Under the club domain the board is served at /coaches; API calls must keep that prefix.
+const BASE = location.pathname.indexOf("/coaches") === 0 ? "/coaches" : "";
 const app = document.getElementById("app");
 const PIN_KEY = "coachesBoardPin";
 const CMP_YEAR = window.__COMPARE_YEAR__;
@@ -75,7 +77,7 @@ async function api(path, opts) {
   const headers = Object.assign({}, opts.headers || {});
   if (state.pin) headers["x-coach-pin"] = state.pin;
   opts.headers = headers;
-  const res = await fetch(path, opts);
+  const res = await fetch(BASE + path, opts);
   let data = {};
   try {
     data = await res.json();
