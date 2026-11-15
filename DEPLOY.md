@@ -9,7 +9,7 @@ next deploy from the repo and are not recorded anywhere.
 
 | Worker name           | Repo root directory        | Build watch paths                                  |
 |-----------------------|----------------------------|----------------------------------------------------|
-| clfc2027              | `/` (repo root)            | `public/**`, `wrangler.toml`                       |
+| clfc2027              | `/` (repo root)            | `public/**`, `worker.js`, `wrangler.toml`          |
 | admin                 | `workers/admin`            | `workers/admin/**`, `shared/**`                    |
 | coaches-board         | `workers/coaches-board`    | `workers/coaches-board/**`, `shared/**`            |
 | fgk                   | `workers/fgk`              | `workers/fgk/**`, `shared/**`                      |

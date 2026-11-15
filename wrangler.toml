@@ -1,5 +1,9 @@
+# Club hub (clfc2027): static pages from public/, served through worker.js.
 name = "clfc2027"
+main = "worker.js"
 compatibility_date = "2026-11-01"
 
 [assets]
 directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
