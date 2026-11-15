@@ -8,6 +8,8 @@
 // Session: a 30-day signed cookie, set after a correct member PIN.
 // ADMIN is outside the gate: it has its own passcode.
 
+import { heroBytes } from "./hero.js";
+
 const COOKIE = "clfc_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
@@ -105,12 +107,14 @@ export function gatePage(message = "") {
   button { width: 100%; margin-top: 14px; background: #14213d; color: #fff; border: 0; border-radius: 8px; padding: 12px; font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .5; }
   .msg { min-height: 1.2em; margin-top: 10px; color: #b42318; font-weight: 600; font-size: .95rem; }
+  .hero { display: block; width: 100%; height: auto; border-radius: 8px; margin: -8px 0 14px; }
   .request-hint { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid #e3e6ec; text-align: center; }
   .request-btn { display: block; box-sizing: border-box; width: 100%; margin-top: 10px; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; }
 </style>
 </head>
 <body>
 <main class="card">
+  <img class="hero" src="/gate/hero.jpg" alt="Cockburn Lakes FC">
   <h1>Members only</h1>
   <p>Enter your 4-digit PIN to open the club hub.</p>
   <form id="form" autocomplete="off">
@@ -209,6 +213,11 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Gate artwork is public: it is the picture on the sign-in page itself.
+    if (path === "/gate/hero.jpg") {
+      return new Response(heroBytes(), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+    }
 
     // Admin keeps its own passcode and sits outside the member gate.
     if (path === "/admin" || path.startsWith("/admin/")) {
