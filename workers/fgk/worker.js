@@ -765,7 +765,7 @@ function getPage() {
 </style>
 </head>
 <body>
-<a class="home-btn" href="https://clfc2027.clfc2027.workers.dev/">← Main page</a>
+<a class="home-btn" href="https://cockburnlakes.com/">← Main page</a>
 
 <img class="hero-bg" src="${HERO_DATA_URI}" alt="">
 
@@ -871,7 +871,8 @@ function getPage() {
 </footer>
 
 <script type="module">
-  import { WheelSpinner } from '/wheel-spinner.js';
+  const BASE = location.pathname.indexOf('/fgk') === 0 ? '/fgk' : '';
+  import { WheelSpinner } from '/fgk/wheel-spinner.js';
 
   let member = null;
   let currentTeamId = null;
@@ -895,7 +896,7 @@ function getPage() {
     const pin = document.getElementById('pinInput').value.trim();
     if (!pin) return;
     document.getElementById('msg-pin').innerHTML = '';
-    const res = await fetch('/api/check-pin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ pin }) });
+    const res = await fetch(BASE + '/api/check-pin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ pin }) });
     const data = await res.json();
     if (!res.ok) { document.getElementById('msg-pin').innerHTML = \`<div class="msg error">\${data.error || 'PIN not recognised.'}</div>\`; return; }
     member = data.member;
@@ -909,7 +910,7 @@ function getPage() {
     const role = document.getElementById('addRole').value;
     const box = document.getElementById('addMemberResult');
     if (!firstName || !lastName) { box.innerHTML = '<div class="msg error">Enter first and last name.</div>'; return; }
-    const res = await fetch('/api/admin/add-member', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ firstName, lastName, role, passcode: adminPasscode }) });
+    const res = await fetch(BASE + '/api/admin/add-member', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ firstName, lastName, role, passcode: adminPasscode }) });
     const data = await res.json();
     if (!res.ok) { box.innerHTML = \`<div class="msg error">\${esc(data.error || 'Could not add member.')}</div>\`; return; }
     const m = data.member;
@@ -923,7 +924,7 @@ function getPage() {
     const query = document.getElementById('pinLookupInput').value.trim();
     const box = document.getElementById('pinLookupResults');
     if (!query) return;
-    const res = await fetch('/api/admin/pin-lookup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query, passcode: adminPasscode }) });
+    const res = await fetch(BASE + '/api/admin/pin-lookup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query, passcode: adminPasscode }) });
     const data = await res.json();
     if (!res.ok) { box.innerHTML = \`<div class="msg error">\${esc(data.error || 'Lookup failed.')}</div>\`; return; }
     if (!data.results.length) { box.innerHTML = '<div class="msg error">No matching members.</div>'; return; }
@@ -940,7 +941,7 @@ function getPage() {
     document.getElementById('boardsSection').classList.remove('hidden');
     setSubtitle('Pick your grade');
 
-    const res = await fetch('/api/grades');
+    const res = await fetch(BASE + '/api/grades');
     const data = await res.json();
     document.getElementById('gradeGrid').innerHTML = !(data.grades || []).length ? '<div class="msg info" style="grid-column:1/-1">2027 grades are not released yet - check back closer to the season.</div>' : (data.grades || []).map(g => \`
       <button onclick="selectGrade(\${g.teamId})">
@@ -952,7 +953,7 @@ function getPage() {
   };
 
   async function refreshBoards() {
-    const res = await fetch('/api/boards');
+    const res = await fetch(BASE + '/api/boards');
     const data = await res.json();
     document.getElementById('boardsSection').innerHTML = \`
       <h3 style="color:#fff; font-size:15px; margin: 4px 0 10px;">Grade Boards</h3>
@@ -1012,7 +1013,7 @@ function getPage() {
   };
 
   async function fetchDetail(teamId) {
-    const res = await fetch(\`/api/grade-detail/\${teamId}?memberId=\${member.id}\`);
+    const res = await fetch(BASE + \`/api/grade-detail/\${teamId}?memberId=\${member.id}\`);
     return res.json();
   }
 
@@ -1094,7 +1095,7 @@ function getPage() {
   }
 
   async function loadWheelCanvas(teamId) {
-    const wRes = await fetch(\`/api/wheel/\${teamId}\`);
+    const wRes = await fetch(BASE + \`/api/wheel/\${teamId}\`);
     const wData = await wRes.json();
     currentWheelPlayers = (wData.players || []).filter(p => !p.is_spun);
 
@@ -1116,7 +1117,7 @@ function getPage() {
 
   window.doSpin = async function () {
     document.getElementById('spinBtn').disabled = true;
-    const res = await fetch('/api/spin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId: currentTeamId, memberId: member.id }) });
+    const res = await fetch(BASE + '/api/spin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId: currentTeamId, memberId: member.id }) });
     const data = await res.json();
     if (!data.ok) {
       document.getElementById('msg-spin').innerHTML = \`<div class="msg error">\${data.reason === 'on_wheel' ? "You're on this wheel \u2014 go spin somewhere else." : (data.reason === 'already_spun' ? 'You already spun this wheel.' : 'Could not spin \u2014 try again.')}</div>\`;
@@ -1139,7 +1140,7 @@ function getPage() {
 
   window.submitAdminPasscode = async function () {
     const passcode = document.getElementById('adminPasscodeInput').value.trim();
-    const res = await fetch('/api/admin/check', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode }) });
+    const res = await fetch(BASE + '/api/admin/check', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode }) });
     const data = await res.json();
     if (!data.ok) { document.getElementById('msg-admin-gate').innerHTML = '<div class="msg error">Incorrect passcode.</div>'; return; }
     adminPasscode = passcode;
@@ -1149,7 +1150,7 @@ function getPage() {
   };
 
   async function loadAdminState() {
-    const res = await fetch('/api/admin/state', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
+    const res = await fetch(BASE + '/api/admin/state', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
     const data = await res.json();
     document.getElementById('adminGrades').innerHTML = (data.grades || []).map(g => \`
       <div class="admin-grade-row">
@@ -1173,12 +1174,12 @@ function getPage() {
   }
 
   window.toggleTest = async function (teamId, on) {
-    await fetch('/api/admin/toggle-test', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId, on, passcode: adminPasscode }) });
+    await fetch(BASE + '/api/admin/toggle-test', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId, on, passcode: adminPasscode }) });
     loadAdminState();
   };
 
   window.markPaid = async function (spinId) {
-    await fetch('/api/admin/mark-paid', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ spinId, passcode: adminPasscode }) });
+    await fetch(BASE + '/api/admin/mark-paid', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ spinId, passcode: adminPasscode }) });
     loadAdminState();
   };
 
@@ -1186,7 +1187,7 @@ function getPage() {
     var msg = document.getElementById('msg-admin-panel');
     msg.innerHTML = '<div class="msg">Syncing all wheels from PlayHQ...</div>';
     try {
-      var res = await fetch('/api/sync-now', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
+      var res = await fetch(BASE + '/api/sync-now', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Sync failed.');
       var lines = (data.results || []).map(function (r) {
@@ -1202,7 +1203,7 @@ function getPage() {
 
   window.clearAllSpins = async function () {
     if (!confirm('This permanently deletes every spin, declared result, and jackpot pot across all 4 grades, and resets all wheels. This cannot be undone. Continue?')) return;
-    await fetch('/api/admin/clear-spins', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
+    await fetch(BASE + '/api/admin/clear-spins', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ passcode: adminPasscode }) });
     document.getElementById('msg-admin-panel').innerHTML = '<div class="msg success">All spins cleared.</div>';
     loadAdminState();
   };
@@ -1210,7 +1211,7 @@ function getPage() {
   window.declareResult = async function (teamId) {
     const playerName = document.getElementById(\`declare-\${teamId}\`).value.trim();
     if (!playerName) return;
-    const res = await fetch('/api/admin/declare-result', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId, playerName, passcode: adminPasscode }) });
+    const res = await fetch(BASE + '/api/admin/declare-result', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ teamId, playerName, passcode: adminPasscode }) });
     const data = await res.json();
     document.getElementById('msg-admin-panel').innerHTML = \`<div class="msg \${data.ok ? 'success' : 'error'}">\${data.ok ? data.message : (data.error || 'Could not declare result.')}</div>\`;
     loadAdminState();
@@ -1224,7 +1225,8 @@ __name2(getPage, "getPage");
 var worker_default = {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    // Served at /fgk on the club domain and at the workers.dev root; both map to the same routes.
+    const path = url.pathname.replace(/^\/fgk(?=\/|$)/, "") || "/";
     const db = env.DB;
     if (path === "/") return new Response(getPage(), { headers: { "Content-Type": "text/html" } });
     if (path === "/wheel-spinner.js") return new Response(WHEEL_SPINNER_JS, { headers: { "Content-Type": "application/javascript" } });
