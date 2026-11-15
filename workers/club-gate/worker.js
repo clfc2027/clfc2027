@@ -114,7 +114,7 @@ export function gatePage(message = "") {
 </head>
 <body>
 <main class="card">
-  <img class="hero" src="/gate/hero.jpg" alt="Cockburn Lakes FC">
+  <img class="hero" src="/gate/hero.jpg?v=2" alt="Cockburn Lakes FC">
   <h1>Members only</h1>
   <p>Enter your 4-digit PIN to open the club hub.</p>
   <form id="form" autocomplete="off">
