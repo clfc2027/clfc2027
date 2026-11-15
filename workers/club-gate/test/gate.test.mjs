@@ -142,3 +142,13 @@ test("path to service mapping is exact on tool prefixes", () => {
   assert.equal(targetBinding("/leaguex"), "HUB");
   assert.equal(targetBinding("/"), "HUB");
 });
+
+test("gate artwork is public and served as a JPEG", async () => {
+  const { env } = newEnv();
+  const r = await worker.fetch(req("/gate/hero.jpg"), env);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("Content-Type"), "image/jpeg");
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  assert.equal(bytes[0], 0xff);
+  assert.equal(bytes[1], 0xd8);
+});
