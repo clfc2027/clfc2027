@@ -244,4 +244,11 @@ body.presenting .compare-bar { display: none; }
 .goal-posts { position: absolute; left: 50%; width: 42px; height: 40px; margin-left: -21px; pointer-events: none; background: linear-gradient(90deg, #fff 0 3px, transparent 3px 19px, #fff 19px 22px, transparent 22px 39px, #fff 39px 42px); background-repeat: no-repeat; background-size: 100% 100%; }
 .goal-posts.top { top: 1%; }
 .goal-posts.bottom { bottom: 1%; }
+
+/* Reference markings: solid 50m arcs and centre square, no dashed third lines */
+.oval-wrap::before, .oval-wrap::after { border: 2px solid rgba(255,255,255,.85); border-bottom: 0; }
+.oval-wrap::after { border-top: 0; border-bottom: 2px solid rgba(255,255,255,.85); border-left: 0; border-right: 0; }
+.third-line { display: none; }
+.centre-square { border: 2px solid rgba(255,255,255,.85); }
+.centre-circle { border: 2px solid rgba(255,255,255,.85); }
 `;
