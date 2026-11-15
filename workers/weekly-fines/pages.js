@@ -44,7 +44,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
 <header>
   <h1>Weekly Fines</h1>
   <p>Cockburn Lakes FC. Each fine is $2. Nominations are anonymous.</p>
-  <a class="admin-btn" href="/admin">Admin</a>
+  <a class="admin-btn" href="/fines/admin">Admin</a>
 </header>
 <main>
   <section>
@@ -75,6 +75,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
 
 <script>
 (function () {
+  var BASE = location.pathname.indexOf("/fines") === 0 ? "/fines" : "";
   var MAX_WORDS = 49;
   var FINE_CENTS = 200;
   var money = function (cents) { return "$" + (cents / 100).toFixed(cents % 100 ? 2 : 0); };
@@ -116,7 +117,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
   }
 
   function loadTally() {
-    fetch("/api/fines", { cache: "no-store" })
+    fetch(BASE + "/api/fines", { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) throw new Error(d.error);
@@ -148,7 +149,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
       return;
     }
     $("submit").disabled = true;
-    fetch("/api/fines", {
+    fetch(BASE + "/api/fines", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pin: pin, target_name: $("target").value, reason: $("reason").value })
@@ -249,6 +250,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 <script>
 (function () {
+  var BASE = location.pathname.indexOf("/fines") === 0 ? "/fines" : "";
   var $ = function (id) { return document.getElementById(id); };
   var passcode = "";
   var fines = [];
@@ -263,7 +265,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
   function post(path, body) {
     body.adminPin = passcode;
-    return fetch(path, {
+    return fetch(BASE + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",

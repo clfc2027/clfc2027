@@ -328,7 +328,8 @@ function page(request, html) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const { pathname } = url;
+    // Served at /fines on the club domain and at the workers.dev root; both map to the same routes.
+    const pathname = url.pathname.replace(/^\/fines(?=\/|$)/, "") || "/";
     const method = request.method;
 
     try {
