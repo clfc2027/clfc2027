@@ -1291,38 +1291,70 @@ function randomiseDuties() {
   var short = [];
   // One map for the whole round: nobody gets two duties on the same day, across all grades.
   var used = {};
+  var open = [];
   DUTY_GRADES.forEach(function (g) {
     var grade = dutyData.grades[g.key];
-    var tasks = grade.tasks.filter(function (t) { return t.required && t.options.length; });
-    // Fill the scarcest pools first so a small board is not used up by other duties.
-    tasks.sort(function (a, b) { return a.options.length - b.options.length; });
-    tasks.forEach(function (task) {
-      var pool = dutyShuffle(task.options).sort(function (x, y) {
-        var cx = baseOf(x.member_id), cy = baseOf(y.member_id);
-        if (cx.total !== cy.total) return cx.total - cy.total;
-        return (cx.by_task[task.key] || 0) - (cy.by_task[task.key] || 0);
-      });
+    grade.tasks.filter(function (t) { return t.required && t.options.length; }).forEach(function (task) {
       for (var i = 0; i < task.slots.length; i++) {
         var input = document.querySelector('.duty-input[data-grade="' + g.key + '"][data-task="' + task.key + '"][data-slot="' + i + '"]');
         if (!input) continue;
-        var pick = null;
-        while (pool.length && !pick) {
-          var cand = pool.shift();
-          if (!used[cand.member_id]) pick = cand;
-        }
-        if (pick) {
-          used[pick.member_id] = true;
-          var c = baseOf(pick.member_id);
-          c.total += 1;
-          c.by_task[task.key] = (c.by_task[task.key] || 0) + 1;
-        } else {
-          short.push(g.label + ' ' + task.label + ' ' + (i + 1));
-        }
-        input.value = pick ? pick.name : '';
-        input.setAttribute('data-member-id', pick ? String(pick.member_id) : '');
-        input.parentNode.querySelector('.duty-suggest').hidden = true;
+        open.push({ g: g, task: task, slot: i, input: input, options: dutyShuffle(task.options) });
       }
     });
+  });
+  function totalOf(memberId) { return baseOf(memberId).total; }
+  // Largest set of people (at most one duty each) that can fill open duties, each matched to a duty they can do.
+  function matchPeople(people) {
+    var slotMatch = open.map(function () { return null; });
+    function augment(p, seen) {
+      for (var si = 0; si < open.length; si++) {
+        if (seen[si] || !open[si].options.some(function (o) { return o.member_id === p.member_id; })) continue;
+        seen[si] = true;
+        if (!slotMatch[si] || augment(slotMatch[si], seen)) { slotMatch[si] = p; return true; }
+      }
+      return false;
+    }
+    people.forEach(function (p) { augment(p, []); });
+    var out = [];
+    open.forEach(function (s, si) { if (slotMatch[si]) out.push({ slot: s, pick: slotMatch[si] }); });
+    return out;
+  }
+  // Everyone gets one duty before anyone gets a second: work up from zero duties, giving each
+  // level as many duties as it can take before moving to the next. Duties are the same whatever the job.
+  var level = 0;
+  while (open.length) {
+    var eligible = {};
+    open.forEach(function (s) {
+      s.options.forEach(function (c) {
+        if (!used[c.member_id] && totalOf(c.member_id) === level) eligible[c.member_id] = c;
+      });
+    });
+    var matched = Object.keys(eligible).length ? matchPeople(dutyShuffle(Object.keys(eligible).map(function (k) { return eligible[k]; }))) : [];
+    if (!matched.length) {
+      var more = open.some(function (s) {
+        return s.options.some(function (c) { return !used[c.member_id] && totalOf(c.member_id) > level; });
+      });
+      if (!more) break;
+      level++;
+      continue;
+    }
+    matched.forEach(function (m) {
+      var pick = m.pick, s = m.slot;
+      used[pick.member_id] = true;
+      var c = baseOf(pick.member_id);
+      c.total += 1;
+      c.by_task[s.task.key] = (c.by_task[s.task.key] || 0) + 1;
+      s.input.value = pick.name;
+      s.input.setAttribute('data-member-id', String(pick.member_id));
+      s.input.parentNode.querySelector('.duty-suggest').hidden = true;
+    });
+    open = open.filter(function (s) { return !matched.some(function (m) { return m.slot === s; }); });
+  }
+  open.forEach(function (s) {
+    short.push(s.g.label + ' ' + s.task.label + ' ' + (s.slot + 1));
+    s.input.value = '';
+    s.input.setAttribute('data-member-id', '');
+    s.input.parentNode.querySelector('.duty-suggest').hidden = true;
   });
   setDutyDirty(true);
   applyDutyHighlights();
