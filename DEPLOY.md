@@ -15,6 +15,7 @@ next deploy from the repo and are not recorded anywhere.
 | fgk                   | `workers/fgk`              | `workers/fgk/**`, `shared/**`                      |
 | players-player        | `workers/players-player`   | `workers/players-player/**`, `shared/**`           |
 | game-day              | `workers/game-day`         | `workers/game-day/**`                              |
+| weekly-fines          | `workers/weekly-fines`     | `workers/weekly-fines/**`, `shared/**`             |
 
 Settings for every Worker:
 - Build command: none
