@@ -1,4 +1,3 @@
-
 // club-gate Worker: every page on cockburnlakes.com sits behind a member PIN.
 //
 // D1 binding DB    -> playhq-warriors (member_directory: PIN check only)
