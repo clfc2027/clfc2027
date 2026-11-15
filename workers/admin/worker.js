@@ -461,10 +461,12 @@ players
 }
 
 // ---------- Game day duties (admin grid) ----------
-// Every allocation is one row in the FLEXI database: season, round, grade, job, slot and member.
+// Names come from the coaches boards saved in FLEXI for the same round.
+// Each allocation is one row: season, round, grade, duty, slot and member.
 // Saving a round replaces that round's rows, so re-saving never double counts in the tally.
 const DUTY_SEASON = 2027;
 const DUTY_GRADES = ["colts", "reserves", "league", "thirds"];
+const DUTY_GRADE_LABEL = { colts: "Colts", reserves: "Reserves", league: "League", thirds: "Thirds" };
 const DUTY_TASKS = [
   { key: "WATER_1H", label: "Water 1st Half", slots: 2 },
   { key: "WATER_2H", label: "Water 2nd Half", slots: 2 },
@@ -472,7 +474,20 @@ const DUTY_TASKS = [
   { key: "SCOREBOARD", label: "Scoreboard", slots: 1 },
   { key: "CHANGEROOM", label: "Changeroom Sweep", slots: 1 },
 ];
-let dutiesTableReady = false;
+// Away games only need water and jumpers.
+const AWAY_TASK_KEYS = ["WATER_1H", "WATER_2H", "JUMPERS"];
+// Home games: the coaches board whose team supplies the names for each duty.
+const DUTY_SOURCE_HOME = {
+  colts: { WATER_1H: "league", WATER_2H: "league", SCOREBOARD: "league", JUMPERS: "colts", CHANGEROOM: "colts" },
+  reserves: { WATER_1H: "thirds", WATER_2H: "thirds", SCOREBOARD: "thirds", JUMPERS: "reserves", CHANGEROOM: "reserves" },
+  league: { WATER_1H: "colts", WATER_2H: "colts", SCOREBOARD: "colts", JUMPERS: "league", CHANGEROOM: "league" },
+  thirds: { WATER_1H: "reserves", WATER_2H: "reserves", SCOREBOARD: "reserves", JUMPERS: "thirds", CHANGEROOM: "thirds" },
+};
+// Away games: the grade that does this grade's water and jumpers. Its board supplies the names.
+const DUTY_PERFORMER_AWAY = { colts: "league", reserves: "colts", league: "reserves", thirds: "thirds" };
+// Away duties a grade does not do at all (no names needed).
+const AWAY_SKIP = { thirds: ["WATER_1H", "WATER_2H"] };
+const MSG_NOT_NAMED = "coach not named team";
 
 function httpErr(message, status) {
   return Object.assign(new Error(message), { status });
@@ -490,7 +505,6 @@ function seasonOf(value) {
 }
 
 async function ensureDutiesTable(flexi) {
-  if (dutiesTableReady) return;
   await flexi.prepare(`CREATE TABLE IF NOT EXISTS game_day_allocations (
     season_year INTEGER NOT NULL,
     round_name TEXT NOT NULL,
@@ -502,109 +516,210 @@ async function ensureDutiesTable(flexi) {
     saved_at TEXT DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (season_year, round_name, grade, task_key, slot)
   )`).run();
-  dutiesTableReady = true;
+  await flexi.prepare(`CREATE TABLE IF NOT EXISTS game_day_round_type (
+    season_year INTEGER NOT NULL,
+    round_name TEXT NOT NULL,
+    venue_type TEXT NOT NULL,
+    saved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season_year, round_name)
+  )`).run();
 }
 
-function emptyDutyTasks() {
-  return DUTY_TASKS.map((t) => ({
-    key: t.key,
-    label: t.label,
-    slots: Array.from({ length: t.slots }, () => null),
-  }));
+// The players a grade's coach saved on the coaches board for one round.
+// Reads nothing if the coaches board has never been used (its tables don't exist yet).
+async function savedBoard(flexi, gradeKey, round) {
+  const none = { saved: false, players: [], venue: null };
+  if (!round) return none;
+  try {
+    const sel = await flexi
+      .prepare(`SELECT id, venue_name FROM board_selections WHERE grade_id = ?1 AND round_name = ?2`)
+      .bind(gradeKey, round)
+      .first();
+    if (!sel) return none;
+    const { results } = await flexi
+      .prepare(
+        `SELECT DISTINCT member_id, player_name FROM board_selection_players
+          WHERE selection_id = ?1 AND member_id IS NOT NULL ORDER BY player_name`
+      )
+      .bind(sel.id)
+      .all();
+    return {
+      saved: true,
+      players: results.map((r) => ({ member_id: r.member_id, name: r.player_name })),
+      venue: sel.venue_name || null,
+    };
+  } catch (e) {
+    if (/no such table/i.test(e.message)) return none;
+    throw e;
+  }
 }
 
-// Duties for every grade in one round. Defaults to the highest round with duties saved that season.
-async function getGameDayDuties(flexi, requestedRound, season) {
+// Home or away for a round: the saved choice, else suggested from the coaches boards' saved venue.
+async function roundVenue(flexi, season, round) {
+  if (!round) return { venue: null, venue_source: null };
+  const stored = await flexi
+    .prepare(`SELECT venue_type FROM game_day_round_type WHERE season_year = ?1 AND round_name = ?2`)
+    .bind(season, round)
+    .first();
+  if (stored) return { venue: stored.venue_type, venue_source: "saved" };
+  const venues = [];
+  for (const g of DUTY_GRADES) {
+    const b = await savedBoard(flexi, g, round);
+    if (b.venue) venues.push(b.venue);
+  }
+  if (!venues.length) return { venue: null, venue_source: null };
+  const home = venues.some((v) => /anning/i.test(v));
+  return { venue: home ? "home" : "away", venue_source: "suggested from the coaches board venue" };
+}
+
+// Which duties apply, and whose board supplies the names for each, for one round.
+function taskRule(venue, gradeKey, taskKey) {
+  if (venue === "away") {
+    const skipped = (AWAY_SKIP[gradeKey] || []).indexOf(taskKey) >= 0;
+    return {
+      required: AWAY_TASK_KEYS.indexOf(taskKey) >= 0 && !skipped,
+      source: DUTY_PERFORMER_AWAY[gradeKey],
+    };
+  }
+  return { required: true, source: DUTY_SOURCE_HOME[gradeKey][taskKey] };
+}
+
+async function buildPlan(flexi, season, round, venueOverride) {
+  const rv = await roundVenue(flexi, season, round);
+  const venue = venueOverride || rv.venue;
+  const venueSource = venueOverride ? "chosen for this view" : rv.venue_source;
+  const boards = {};
+  for (const g of DUTY_GRADES) boards[g] = await savedBoard(flexi, g, round);
+  const grades = {};
+  for (const g of DUTY_GRADES) {
+    grades[g] = {
+      label: DUTY_GRADE_LABEL[g],
+      tasks: DUTY_TASKS.map((t) => {
+        const rule = taskRule(venue, g, t.key);
+        const options = rule.required ? boards[rule.source].players : [];
+        return {
+          key: t.key,
+          label: t.label,
+          slots: Array.from({ length: t.slots }, () => null),
+          required: rule.required,
+          source: rule.source,
+          source_label: DUTY_GRADE_LABEL[rule.source],
+          options,
+          message: rule.required && options.length === 0 ? MSG_NOT_NAMED : null,
+        };
+      }),
+    };
+  }
+  return { venue, venue_source: venueSource, grades };
+}
+
+// Duties for every grade in one round. Defaults to the latest round that has anything saved.
+async function getGameDayDuties(flexi, requestedRound, season, venueOverride) {
   await ensureDutiesTable(flexi);
-  const { results: roundRows } = await flexi.prepare(
-    `SELECT DISTINCT round_name FROM game_day_allocations WHERE season_year = ?1
-       ORDER BY CAST(round_name AS INTEGER), round_name`
-  ).bind(season).all();
-  const rounds = roundRows.map((r) => r.round_name);
+  const { results: roundRows } = await flexi
+    .prepare(
+      `SELECT round_name FROM game_day_allocations WHERE season_year = ?1
+       UNION SELECT round_name FROM game_day_round_type WHERE season_year = ?1`
+    )
+    .bind(season)
+    .all();
+  const rounds = roundRows
+    .map((r) => r.round_name)
+    .sort((a, b) => Number(a) - Number(b) || (a < b ? -1 : a > b ? 1 : 0));
   const round = requestedRound ? String(requestedRound).trim() : rounds[rounds.length - 1] || null;
 
-  const grades = {};
-  for (const g of DUTY_GRADES) grades[g] = { tasks: emptyDutyTasks() };
-
+  const plan = await buildPlan(flexi, season, round, venueOverride);
   if (round) {
-    const { results } = await flexi.prepare(
-      `SELECT grade, task_key, slot, member_id, player_name FROM game_day_allocations
-        WHERE season_year = ?1 AND round_name = ?2`
-    ).bind(season, round).all();
+    const { results } = await flexi
+      .prepare(
+        `SELECT grade, task_key, slot, member_id, player_name FROM game_day_allocations
+          WHERE season_year = ?1 AND round_name = ?2`
+      )
+      .bind(season, round)
+      .all();
     for (const r of results) {
-      const grade = grades[r.grade];
+      const grade = plan.grades[r.grade];
       if (!grade) continue;
       const task = grade.tasks.find((t) => t.key === r.task_key);
       if (!task || r.slot >= task.slots.length) continue;
       task.slots[r.slot] = { member_id: r.member_id, name: r.player_name };
     }
   }
-  return { season, round, rounds, grades };
+  return { season, round, rounds, venue: plan.venue, venue_source: plan.venue_source, grades: plan.grades };
 }
 
-// Saves a whole round (all four grades) in one go. Every player is checked against member_directory,
-// and the name is copied from the directory at save time.
-async function saveGameDayRound(flexi, memberDb, payload) {
+// Saves a whole round (all four grades) and its home or away choice in one go.
+// Every name must be on the board that supplies that duty for that round.
+async function saveGameDayRound(flexi, payload) {
   const season = seasonOf(payload.season);
   const round = String(payload.round || "").trim();
+  const venue = payload.venue;
   if (!round || round.length > 10) throw httpErr("Pick a round first", 400);
+  if (venue !== "home" && venue !== "away") throw httpErr("Choose home or away for this round first", 400);
   await ensureDutiesTable(flexi);
 
+  const plan = await buildPlan(flexi, season, round, venue);
   const rows = [];
   for (const grade of DUTY_GRADES) {
-    const tasks = (payload.grades && payload.grades[grade] && payload.grades[grade].tasks) || {};
+    const given = (payload.grades && payload.grades[grade] && payload.grades[grade].tasks) || {};
     const picks = [];
-    for (const task of DUTY_TASKS) {
-      const given = Array.isArray(tasks[task.key]) ? tasks[task.key] : [];
-      if (given.length > task.slots) throw httpErr(`${grade}: ${task.label} has too many players`, 400);
-      given.forEach((card, slot) => {
+    for (const task of plan.grades[grade].tasks) {
+      const list = Array.isArray(given[task.key]) ? given[task.key] : [];
+      if (list.length > task.slots.length) throw httpErr(`${grade}: ${task.label} has too many players`, 400);
+      list.forEach((card, slot) => {
         if (!card) return;
-        const memberId = Number(card.member_id);
-        if (!Number.isInteger(memberId) || memberId <= 0) {
-          throw httpErr(`Pick the ${task.label} names from the member list`, 400);
+        if (!task.required) {
+          throw httpErr(`${DUTY_GRADE_LABEL[grade]} ${task.label} is not needed for an ${venue} game`, 400);
         }
-        picks.push({ grade, task_key: task.key, slot, member_id: memberId });
+        const memberId = Number(card.member_id);
+        const opt = task.options.filter((o) => o.member_id === memberId)[0];
+        if (!opt) {
+          throw httpErr(`Pick ${DUTY_GRADE_LABEL[grade]} ${task.label} names from the ${task.source_label} board`, 400);
+        }
+        picks.push({ grade, task_key: task.key, slot, member_id: memberId, name: opt.name });
       });
     }
     const ids = picks.map((p) => p.member_id);
     if (ids.some((id, i) => ids.indexOf(id) !== i)) {
-      throw httpErr(`A player is on more than one job for ${grade} this round`, 409);
+      throw httpErr(`A player is on more than one job for ${DUTY_GRADE_LABEL[grade]} this round`, 409);
     }
     rows.push(...picks);
   }
 
-  const names = new Map();
-  for (const id of new Set(rows.map((r) => r.member_id))) {
-    const row = await memberDb
-      .prepare(`SELECT id, first_name, last_name FROM member_directory WHERE id = ?1`)
-      .bind(id)
-      .first();
-    if (!row) throw httpErr("A selected name is not in the member directory", 400);
-    names.set(id, `${row.first_name} ${row.last_name}`.trim());
-  }
-
   const stmts = [
     flexi.prepare(`DELETE FROM game_day_allocations WHERE season_year = ?1 AND round_name = ?2`).bind(season, round),
+    flexi
+      .prepare(
+        `INSERT INTO game_day_round_type (season_year, round_name, venue_type, saved_at)
+           VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+         ON CONFLICT (season_year, round_name) DO UPDATE SET venue_type = excluded.venue_type, saved_at = CURRENT_TIMESTAMP`
+      )
+      .bind(season, round, venue),
   ];
   for (const r of rows) {
     stmts.push(
-      flexi.prepare(
-        `INSERT INTO game_day_allocations (season_year, round_name, grade, task_key, slot, member_id, player_name, saved_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)`
-      ).bind(season, round, r.grade, r.task_key, r.slot, r.member_id, names.get(r.member_id))
+      flexi
+        .prepare(
+          `INSERT INTO game_day_allocations (season_year, round_name, grade, task_key, slot, member_id, player_name, saved_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)`
+        )
+        .bind(season, round, r.grade, r.task_key, r.slot, r.member_id, r.name)
     );
   }
   await flexi.batch(stmts);
-  return { ok: true, season, round, assigned: rows.length };
+  return { ok: true, season, round, venue, assigned: rows.length };
 }
 
 // Running count of each person's allocations, per job, for one season.
 async function getGameDayTally(flexi, season) {
   await ensureDutiesTable(flexi);
-  const { results } = await flexi.prepare(
-    `SELECT member_id, MAX(player_name) AS player_name, task_key, COUNT(*) AS n
-       FROM game_day_allocations WHERE season_year = ?1 GROUP BY member_id, task_key`
-  ).bind(season).all();
+  const { results } = await flexi
+    .prepare(
+      `SELECT member_id, MAX(player_name) AS player_name, task_key, COUNT(*) AS n
+         FROM game_day_allocations WHERE season_year = ?1 GROUP BY member_id, task_key`
+    )
+    .bind(season)
+    .all();
   const byMember = new Map();
   for (const r of results) {
     const m = byMember.get(r.member_id) || { member_id: r.member_id, name: r.player_name, total: 0, by_task: {} };
@@ -619,11 +734,14 @@ async function getGameDayTally(flexi, season) {
 // Every allocation for one season, in round order: who was on which duty, and for which grade.
 async function getGameDayHistory(flexi, season) {
   await ensureDutiesTable(flexi);
-  const { results } = await flexi.prepare(
-    `SELECT round_name, grade, task_key, slot, member_id, player_name FROM game_day_allocations
-      WHERE season_year = ?1
-      ORDER BY CAST(round_name AS INTEGER), round_name, grade, task_key, slot`
-  ).bind(season).all();
+  const { results } = await flexi
+    .prepare(
+      `SELECT round_name, grade, task_key, slot, member_id, player_name FROM game_day_allocations
+        WHERE season_year = ?1
+        ORDER BY CAST(round_name AS INTEGER), round_name, grade, task_key, slot`
+    )
+    .bind(season)
+    .all();
   const taskLabel = {};
   for (const t of DUTY_TASKS) taskLabel[t.key] = t.label;
   const rows = results.map((r) => ({
@@ -634,22 +752,6 @@ async function getGameDayHistory(flexi, season) {
     name: r.player_name,
   }));
   return { season, rows };
-}
-
-// Players in the member directory who have no duty allocated in the season yet.
-async function getUnallocatedPlayers(db, flexi, season) {
-  await ensureDutiesTable(flexi);
-  const { results: used } = await flexi.prepare(
-    `SELECT DISTINCT member_id FROM game_day_allocations WHERE season_year = ?1`
-  ).bind(season).all();
-  const usedIds = new Set(used.map((r) => r.member_id));
-  const { results: players } = await db.prepare(
-    `SELECT id, first_name, last_name FROM member_directory WHERE role = 'player' ORDER BY last_name, first_name`
-  ).all();
-  const waiting = players
-    .filter((p) => !usedIds.has(p.id))
-    .map((p) => ({ member_id: p.id, name: `${p.first_name} ${p.last_name}`.trim() }));
-  return { season, total_players: players.length, players: waiting };
 }
 
 function getDashboard() {
@@ -753,6 +855,14 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .duty-filter { width: 100%; padding: 8px 10px; margin-bottom: 8px; border: 1px solid #cbd3dc; border-radius: 4px; font-size: 13px; }
 
+.duty-venue-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.duty-venue-row label { font-size: 12px; font-weight: 700; color: var(--blue); }
+.duty-venue-row select { width: auto; margin: 0; padding: 6px 8px; }
+.duty-src { display: block; font-family: Inter, -apple-system, sans-serif; font-size: 10px; font-weight: 400; color: #666; }
+.duty-hint { font-size: 11px; color: #666; }
+.duty-input:disabled { background: #f2f2f2; color: #999; }
+.duty-input:disabled::placeholder { color: #aaa; }
+
 /* Login screen */
 #login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(180deg, var(--blue) 0%, var(--blue-light) 100%); z-index: 100; }
 #login .card { width: min(340px, 100%); text-align: center; }
@@ -826,11 +936,12 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 <div class="card duties-card">
 <h3>📋 Game Day Duties</h3>
-<p>Pick a round, then type a player's name and choose him from the list. Nothing is saved until you press Save duties. Each save records who is on which job for that round.</p>
+<p>Pick a round, then whether it is a home or away game. Names come from the coaches board saved for that round, so a duty shows "coach not named team" until that coach has saved the team. Nothing is saved until you press Save duties.</p>
 <div class="duty-tabs" id="dutyTabs"></div>
+<div class="duty-venue-row"><label for="dutyVenue">Round type</label><select id="dutyVenue"><option value="">Choose home or away</option><option value="home">Home game</option><option value="away">Away game</option></select></div>
 <div class="duty-title" id="dutyTitle">CLFC GAME DAY DUTIES</div>
 <div class="duty-grid" id="dutyGrid"></div>
-<div class="duty-actions"><span class="duty-note" id="dutyNote"></span><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
+<div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
 <div class="status" id="status-duties"></div>
 <h3 class="duty-tally-head">Duty tally (2027 season)</h3>
 <p>How many duties each person has been allocated so far this season. Use it to keep allocations fair.</p>
@@ -839,9 +950,6 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 <p>Every name and the duty it was allocated to, by round.</p>
 <input type="search" id="dutyHistoryFilter" class="duty-filter" placeholder="Filter by name">
 <div id="dutyHistory"></div>
-<h3 class="duty-tally-head">Players with no duty yet (2027 season)</h3>
-<p>Players in the member directory who have not been allocated a duty this season.</p>
-<div id="dutyUnallocated"></div>
 </div>
 
 <div class="card">
@@ -932,14 +1040,8 @@ var DUTY_GRADES = [
   { key: 'league', label: 'LEAGUE', colour: '#9ed7a5' },
   { key: 'thirds', label: 'THIRDS', colour: '#d9a7e6' }
 ];
-var DUTY_TASK_LAYOUT = [
-  { key: 'WATER_1H', label: 'Water 1st Half', slots: 2 },
-  { key: 'WATER_2H', label: 'Water 2nd Half', slots: 2 },
-  { key: 'JUMPERS', label: 'Jumpers', slots: 1 },
-  { key: 'SCOREBOARD', label: 'Scoreboard', slots: 1 },
-  { key: 'CHANGEROOM', label: 'Changeroom Sweep', slots: 1 }
-];
 var DUTY_ROUND_COUNT = 25;
+var MSG_NOT_NAMED_CLIENT = 'coach not named team';
 var dutyRound = '';
 var dutyData = null;
 var dutyDirty = false;
@@ -956,22 +1058,35 @@ function dutyLabelFor(list, key) {
   return hit ? hit.label : key;
 }
 
+function dutyTaskFor(gradeKey, taskKey) {
+  const grade = dutyData && dutyData.grades && dutyData.grades[gradeKey];
+  if (!grade) return null;
+  return grade.tasks.filter(function (t) { return t.key === taskKey; })[0] || null;
+}
+
 function setDutyDirty(flag) {
   dutyDirty = flag;
   document.getElementById('dutySaveBtn').disabled = !flag;
   document.getElementById('dutyNote').textContent = flag ? 'Unsaved changes' : '';
 }
 
-async function loadDutyRound(round) {
-  if (dutyDirty && !window.confirm('Discard the unsaved changes for Round ' + dutyRound + '?')) return;
-  const query = '?season=' + DUTY_SEASON + (round ? '&round=' + encodeURIComponent(round) : '');
+// Loads one round. venueOverride shows the grid as home or away without saving. markDirty flags it as unsaved.
+async function loadDutyRound(round, venueOverride, markDirty) {
+  if (dutyDirty && !window.confirm('Discard the unsaved changes for Round ' + dutyRound + '?')) {
+    document.getElementById('dutyVenue').value = (dutyData && dutyData.venue) || '';
+    return;
+  }
+  let query = '?season=' + DUTY_SEASON;
+  if (round) query += '&round=' + encodeURIComponent(round);
+  if (venueOverride) query += '&venue=' + encodeURIComponent(venueOverride);
   const res = await fetch('/api/game-day-duties' + query);
-  const data = await res.json();
+  const data = await res.json().catch(function () { return {}; });
   if (!res.ok) return showStatus('duties', data.error || 'Could not load game day duties', 'error');
   dutyData = data;
   dutyRound = data.round || '';
-  setDutyDirty(false);
+  setDutyDirty(!!markDirty);
   hideStatus('duties');
+  document.getElementById('dutyVenue').value = data.venue || '';
   renderDutyTabs();
   renderDutyGrid();
 }
@@ -989,25 +1104,30 @@ function renderDutyTabs() {
 }
 
 function renderDutyGrid() {
-  document.getElementById('dutyTitle').textContent = 'CLFC GAME DAY DUTIES' + (dutyRound ? ' - Round ' + dutyRound : '');
+  const venueSet = !!dutyData.venue;
+  const venueWord = dutyData.venue === 'home' ? ' (Home)' : dutyData.venue === 'away' ? ' (Away)' : '';
+  document.getElementById('dutyTitle').textContent = 'CLFC GAME DAY DUTIES' + (dutyRound ? ' - Round ' + dutyRound : '') + venueWord;
+  document.getElementById('dutyVenueHint').textContent = dutyData.venue_source ? 'Round type ' + dutyData.venue_source : '';
   let html = '';
   DUTY_GRADES.forEach(function (g) {
-    const grade = dutyData.grades && dutyData.grades[g.key];
-    const tasks = grade ? grade.tasks : [];
+    const grade = dutyData.grades[g.key];
     html += '<div class="duty-block">';
     html += '<div class="duty-block-head" style="background:' + g.colour + '">' + g.label + '</div>';
     html += '<div class="duty-table">';
     html += '<div class="duty-row duty-head"><div class="duty-task">Task</div><div class="duty-cells"><div class="duty-cell">Player</div></div></div>';
-    DUTY_TASK_LAYOUT.forEach(function (layout, idx) {
-      const task = tasks[idx] || { slots: [] };
-      html += '<div class="duty-row"><div class="duty-task">' + dutyEsc(layout.label) + '</div>';
-      html += '<div class="duty-cells" style="grid-template-columns:repeat(' + layout.slots + ',1fr)">';
-      for (let i = 0; i < layout.slots; i++) {
-        const s = task.slots[i] || null;
+    grade.tasks.forEach(function (task) {
+      const caption = !venueSet ? '' : task.required ? 'from ' + task.source_label + ' board' : 'not needed for away';
+      html += '<div class="duty-row"><div class="duty-task">' + dutyEsc(task.label) +
+        (caption ? '<span class="duty-src">' + dutyEsc(caption) + '</span>' : '') + '</div>';
+      html += '<div class="duty-cells" style="grid-template-columns:repeat(' + task.slots.length + ',1fr)">';
+      const enabled = venueSet && task.required;
+      const placeholder = !venueSet ? 'Pick home or away' : task.required ? 'Type a name' : 'Not needed';
+      for (let i = 0; i < task.slots.length; i++) {
+        const s = task.slots[i];
         html += '<div class="duty-cell">';
-        html += '<input type="text" class="duty-input" autocomplete="off" placeholder="Type a name"';
-        html += ' data-grade="' + g.key + '" data-task="' + layout.key + '" data-slot="' + i + '"';
-        html += ' data-member-id="' + (s ? dutyEsc(s.member_id) : '') + '" value="' + dutyEsc(s ? s.name : '') + '">';
+        html += '<input type="text" class="duty-input" autocomplete="off" placeholder="' + placeholder + '"' + (enabled ? '' : ' disabled');
+        html += ' data-grade="' + g.key + '" data-task="' + task.key + '" data-slot="' + i + '"';
+        html += ' data-member-id="' + (s && enabled ? dutyEsc(s.member_id) : '') + '" value="' + dutyEsc(s && enabled ? s.name : '') + '">';
         html += '<div class="duty-suggest" hidden></div></div>';
       }
       html += '</div></div>';
@@ -1017,26 +1137,30 @@ function renderDutyGrid() {
   document.getElementById('dutyGrid').innerHTML = html;
 }
 
-// Typeahead over the member list already loaded on this page.
+// Typeahead: only the players on the board that supplies this duty. No board saved shows the message.
 function showDutySuggestions(input) {
   const box = input.parentNode.querySelector('.duty-suggest');
+  const task = dutyTaskFor(input.getAttribute('data-grade'), input.getAttribute('data-task'));
   const typed = input.value.trim().toLowerCase();
-  const parts = typed.split(' ').filter(Boolean);
-  if (typed.length < 2 || parts.length === 0) {
+  if (!typed) {
     box.hidden = true;
     box.innerHTML = '';
     return;
   }
-  const hits = members.filter(function (m) {
-    const full = (m.first_name + ' ' + m.last_name).toLowerCase();
-    return parts.every(function (p) { return full.indexOf(p) >= 0; });
+  if (!task || task.options.length === 0) {
+    box.innerHTML = '<div class="duty-none">' + dutyEsc((task && task.message) || MSG_NOT_NAMED_CLIENT) + '</div>';
+    box.hidden = false;
+    return;
+  }
+  const parts = typed.split(' ').filter(Boolean);
+  const hits = task.options.filter(function (o) {
+    return parts.every(function (p) { return o.name.toLowerCase().indexOf(p) >= 0; });
   }).slice(0, 8);
   box.innerHTML = hits.length
-    ? hits.map(function (m) {
-        return '<button type="button" class="duty-option" data-id="' + m.id + '">' + dutyEsc(m.first_name + ' ' + m.last_name) +
-          (m.role ? ' <span>' + dutyEsc(m.role) + '</span>' : '') + '</button>';
+    ? hits.map(function (o) {
+        return '<button type="button" class="duty-option" data-id="' + o.member_id + '">' + dutyEsc(o.name) + '</button>';
       }).join('')
-    : '<div class="duty-none">No match in the member directory</div>';
+    : '<div class="duty-none">No match on the ' + dutyEsc(task.source_label) + ' board</div>';
   box.hidden = false;
 }
 
@@ -1044,17 +1168,19 @@ function showDutySuggestions(input) {
 function pickDutyOption(btn) {
   const cell = btn.closest('.duty-cell');
   const input = cell.querySelector('.duty-input');
-  const id = btn.getAttribute('data-id');
-  const m = members.filter(function (x) { return String(x.id) === String(id); })[0];
-  if (!m) return;
-  input.value = m.first_name + ' ' + m.last_name;
-  input.setAttribute('data-member-id', String(m.id));
+  const task = dutyTaskFor(input.getAttribute('data-grade'), input.getAttribute('data-task'));
+  const id = String(btn.getAttribute('data-id'));
+  const opt = task ? task.options.filter(function (o) { return String(o.member_id) === id; })[0] : null;
+  if (!opt) return;
+  input.value = opt.name;
+  input.setAttribute('data-member-id', String(opt.member_id));
   cell.querySelector('.duty-suggest').hidden = true;
   setDutyDirty(true);
 }
 
 async function saveDutyRound() {
   if (!dutyRound) return showStatus('duties', 'Pick a round first', 'error');
+  if (!dutyData.venue) return showStatus('duties', 'Choose home or away for this round first', 'error');
   const grades = {};
   for (let g = 0; g < DUTY_GRADES.length; g++) {
     const gradeKey = DUTY_GRADES[g].key;
@@ -1062,6 +1188,7 @@ async function saveDutyRound() {
     const inputs = document.querySelectorAll('.duty-input[data-grade="' + gradeKey + '"]');
     for (let i = 0; i < inputs.length; i++) {
       const inp = inputs[i];
+      if (inp.disabled) continue;
       const text = inp.value.trim();
       if (!text) continue;
       const memberId = inp.getAttribute('data-member-id');
@@ -1080,7 +1207,7 @@ async function saveDutyRound() {
   const res = await fetch('/api/game-day-duties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ season: DUTY_SEASON, round: dutyRound, grades: grades })
+    body: JSON.stringify({ season: DUTY_SEASON, round: dutyRound, venue: dutyData.venue, grades: grades })
   });
   const data = await res.json().catch(function () { return {}; });
   if (!res.ok) {
@@ -1089,7 +1216,7 @@ async function saveDutyRound() {
   }
   if (dutyData.rounds.indexOf(dutyRound) < 0) dutyData.rounds.push(dutyRound);
   setDutyDirty(false);
-  showStatus('duties', 'Saved duties for Round ' + dutyRound + ' (' + data.assigned + ' allocations)', 'success');
+  showStatus('duties', 'Saved Round ' + dutyRound + ' (' + (data.venue === 'home' ? 'home' : 'away') + ', ' + data.assigned + ' allocations)', 'success');
   await loadDutyRound(dutyRound);
   loadDutyTally();
 }
@@ -1115,7 +1242,6 @@ async function loadDutyTally() {
     box.innerHTML = '<div class="duty-tally"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
   }
   loadDutyHistory();
-  loadUnallocated();
 }
 
 async function loadDutyHistory() {
@@ -1151,42 +1277,24 @@ function renderDutyHistory() {
     '<div class="duty-tally"><table><thead><tr><th>Round</th><th>Grade</th><th>Duty</th><th>Name</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
-async function loadUnallocated() {
-  const res = await fetch('/api/game-day-unallocated?season=' + DUTY_SEASON);
-  const data = await res.json().catch(function () { return {}; });
-  const box = document.getElementById('dutyUnallocated');
-  if (!res.ok) {
-    box.innerHTML = '<p>' + dutyEsc(data.error || 'Could not load the list') + '</p>';
-    return;
-  }
-  if (!data.total_players) {
-    box.innerHTML = '<p>No players found in the member directory.</p>';
-    return;
-  }
-  if (!data.players.length) {
-    box.innerHTML = '<p>Every player has a duty this season.</p>';
-    return;
-  }
-  const body = data.players.map(function (p) {
-    return '<tr><td>' + dutyEsc(p.name) + '</td></tr>';
-  }).join('');
-  box.innerHTML = '<p>' + data.players.length + ' of ' + data.total_players + ' players have no duty yet.</p>' +
-    '<div class="duty-tally"><table><thead><tr><th>Name</th></tr></thead><tbody>' + body + '</tbody></table></div>';
-}
-
 document.getElementById('dutyTabs').addEventListener('click', function (e) {
   const r = e.target.getAttribute('data-round');
-  if (r) loadDutyRound(r);
+  if (r) loadDutyRound(r, null, false);
+});
+document.getElementById('dutyVenue').addEventListener('change', function (e) {
+  const v = e.target.value;
+  if (!dutyRound) {
+    e.target.value = '';
+    return showStatus('duties', 'Pick a round first', 'error');
+  }
+  if (!v) return;
+  loadDutyRound(dutyRound, v, true);
 });
 document.getElementById('dutyGrid').addEventListener('input', function (e) {
   const t = e.target;
   if (!t.classList.contains('duty-input')) return;
   t.setAttribute('data-member-id', '');
   setDutyDirty(true);
-  if (!t.value.trim()) {
-    t.parentNode.querySelector('.duty-suggest').hidden = true;
-    return;
-  }
   showDutySuggestions(t);
 });
 document.getElementById('dutyGrid').addEventListener('click', function (e) {
@@ -1667,7 +1775,15 @@ return json({ error: e.message }, 500);
 
 if (path === "/api/game-day-duties" && request.method === "GET") {
 try {
-return json(await getGameDayDuties(needFlexi(env), url.searchParams.get("round"), seasonOf(url.searchParams.get("season"))));
+const venue = url.searchParams.get("venue");
+return json(
+  await getGameDayDuties(
+    needFlexi(env),
+    url.searchParams.get("round"),
+    seasonOf(url.searchParams.get("season")),
+    venue === "home" || venue === "away" ? venue : null
+  )
+);
 } catch (e) {
 return json({ error: e.message }, e.status || 500);
 }
@@ -1675,7 +1791,7 @@ return json({ error: e.message }, e.status || 500);
 
 if (path === "/api/game-day-duties" && request.method === "POST") {
 try {
-return json(await saveGameDayRound(needFlexi(env), env.DB, await request.json()));
+return json(await saveGameDayRound(needFlexi(env), await request.json()));
 } catch (e) {
 return json({ error: e.message }, e.status || 500);
 }
@@ -1692,14 +1808,6 @@ return json({ error: e.message }, e.status || 500);
 if (path === "/api/game-day-history" && request.method === "GET") {
 try {
 return json(await getGameDayHistory(needFlexi(env), seasonOf(url.searchParams.get("season"))));
-} catch (e) {
-return json({ error: e.message }, e.status || 500);
-}
-}
-
-if (path === "/api/game-day-unallocated" && request.method === "GET") {
-try {
-return json(await getUnallocatedPlayers(env.DB, needFlexi(env), seasonOf(url.searchParams.get("season"))));
 } catch (e) {
 return json({ error: e.message }, e.status || 500);
 }
