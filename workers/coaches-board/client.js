@@ -679,16 +679,19 @@ async function runPlayerSearch(q) {
       return;
     }
     box.innerHTML = filtered
-      .map((p) => \`<div data-mid="\${p.member_id}">\${escapeHtml(p.name)}\${p.jumper ? " — #" + escapeHtml(p.jumper) : ""}</div>\`)
+      .map((p) => \`<div data-mid="\${p.member_id}">\${escapeHtml(p.name)}</div>\`)
       .join("");
     box.querySelectorAll("[data-mid]").forEach((row, i) => {
       row.onclick = () => {
         const player = filtered[i];
+        // The board shows the surname only, with no number.
+        const parts = String(player.name || "").trim().split(/\\s+/);
+        const surname = player.last_name || parts[parts.length - 1] || player.name;
         setSlotValue(state.activeSlot.type, state.activeSlot.slot, {
           member_id: player.member_id,
           playhq_player_id: player.playhq_player_id,
-          name: player.name,
-          jumper: player.jumper,
+          name: surname,
+          jumper: null,
         });
         closeSelector();
         render();
