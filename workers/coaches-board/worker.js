@@ -314,6 +314,15 @@ async function deleteSelection(db, gradeId, round) {
 }
 
 // Public read for the grade pages: the saved team names only, never PINs or member IDs.
+// The most recently saved round for a grade. Public, names and jumpers only.
+async function getLatestPublished(db, gradeId) {
+  const grade = await assertGrade(db, gradeId);
+  const latest = await db.prepare(
+    `SELECT round_name FROM board_selections WHERE grade_id = ?1 ORDER BY updated_at DESC, id DESC LIMIT 1`
+  ).bind(gradeId).first();
+  if (!latest) return { grade_id: gradeId, grade_name: grade.grade_name, round_name: null, selection: null, positions: {}, interchange: [] };
+  return getPublished(db, gradeId, latest.round_name);
+}
 async function getPublished(db, gradeId, round) {
   if (!gradeId || !round) throw httpError("grade_id and round are required", 400);
   const grade = await assertGrade(db, gradeId);
@@ -327,6 +336,7 @@ async function getPublished(db, gradeId, round) {
     round_name: round,
     selection: data.selection
       ? {
+          round_name: round,
           opponent_name: data.selection.opponent_name,
           match_date: data.selection.match_date,
           venue_name: data.selection.venue_name,
@@ -561,6 +571,9 @@ var worker_default = {
         const { pin } = await request.json();
         await verifyBoardPin(env, env.FLEXI, pin);
         return json({ ok: true });
+      }
+      if (pathname === "/api/published/latest" && method === "GET") {
+        return json(await getLatestPublished(env.FLEXI, url.searchParams.get("grade_id")));
       }
       if (pathname === "/api/published" && method === "GET") {
         return json(await getPublished(env.FLEXI, url.searchParams.get("grade_id"), url.searchParams.get("round")));
