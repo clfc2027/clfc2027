@@ -323,6 +323,57 @@ async function getLatestPublished(db, gradeId) {
   if (!latest) return { grade_id: gradeId, grade_name: grade.grade_name, round_name: null, selection: null, positions: {}, interchange: [] };
   return getPublished(db, gradeId, latest.round_name);
 }
+// ---------- Game day duties, public read (names only; written by the admin Worker) ----------
+var DUTY_SEASON_PUBLIC = 2027;
+var DUTY_PUBLIC_GRADES = [
+  { key: "colts", label: "Colts" },
+  { key: "reserves", label: "Reserves" },
+  { key: "league", label: "League" },
+  { key: "thirds", label: "Thirds" }
+];
+var DUTY_PUBLIC_TASKS = [
+  { key: "WATER_1H", label: "Water 1st Half" },
+  { key: "WATER_2H", label: "Water 2nd Half" },
+  { key: "JUMPERS", label: "Jumpers" },
+  { key: "SCOREBOARD", label: "Scoreboard" },
+  { key: "CHANGEROOM", label: "Changeroom Sweep" }
+];
+// Latest round with duties saved for the season, with every grade's names for each duty.
+// Returns an empty result if the duty tables have never been created.
+async function getLatestDuties(flexi) {
+  const empty = { season: DUTY_SEASON_PUBLIC, round: null, venue: null, grades: [] };
+  try {
+    const latest = await flexi.prepare(
+      `SELECT round_name FROM game_day_allocations WHERE season_year = ?1
+        ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
+    ).bind(DUTY_SEASON_PUBLIC).first();
+    if (!latest) return empty;
+    const round = latest.round_name;
+    const type = await flexi.prepare(
+      `SELECT venue_type FROM game_day_round_type WHERE season_year = ?1 AND round_name = ?2`
+    ).bind(DUTY_SEASON_PUBLIC, round).first();
+    const { results } = await flexi.prepare(
+      `SELECT grade, task_key, slot, player_name FROM game_day_allocations
+        WHERE season_year = ?1 AND round_name = ?2 ORDER BY grade, task_key, slot`
+    ).bind(DUTY_SEASON_PUBLIC, round).all();
+    const grades = DUTY_PUBLIC_GRADES.map((g) => ({
+      key: g.key,
+      label: g.label,
+      tasks: DUTY_PUBLIC_TASKS.map((t) => ({
+        key: t.key,
+        label: t.label,
+        names: results
+          .filter((r) => r.grade === g.key && r.task_key === t.key)
+          .map((r) => r.player_name)
+      })).filter((t) => t.names.length > 0)
+    }));
+    return { season: DUTY_SEASON_PUBLIC, round, venue: type ? type.venue_type : null, grades };
+  } catch (e) {
+    if (/no such table/i.test(e.message)) return empty;
+    throw e;
+  }
+}
+
 // Display rule: the surname only. If two or more players on the same board share a surname,
 // every one of them shows the first name with the surname.
 function surnameOf(full) {
@@ -602,6 +653,9 @@ var worker_default = {
       }
       if (pathname === "/api/published" && method === "GET") {
         return json(await getPublished(env.FLEXI, url.searchParams.get("grade_id"), url.searchParams.get("round")));
+      }
+      if (pathname === "/api/duties/latest" && method === "GET") {
+        return json(await getLatestDuties(env.FLEXI));
       }
       // Coaches only (PIN in x-coach-pin)
       if (pathname === "/api/players" && method === "GET") {

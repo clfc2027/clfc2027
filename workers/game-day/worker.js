@@ -28,7 +28,8 @@ export default {
     }
     const html = (await templateRes.text())
       .replaceAll("__PAGE_NAME__", grade.pageName)
-      .replaceAll("__GRADE_MATCH__", grade.gradeMatch);
+      .replaceAll("__GRADE_MATCH__", grade.gradeMatch)
+      .replaceAll("__GRADE_KEY__", slug);
 
     return new Response(request.method === "HEAD" ? null : html, {
       headers: {
