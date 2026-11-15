@@ -23,7 +23,7 @@ var POSITIONS = [
   { id: "FORWARD_POCKET_R", label: "Forward Pocket", short: "FP", x: 74, y: 84, line: "forward" }
 ];
 var INTERCHANGE_COUNT = 4;
-var HUB_URL = "https://clfc2027.clfc2027.workers.dev/";
+var HUB_URL = "https://cockburnlakes.com/";
 // The four boards. They live in this Worker's own tables, so they exist before any PlayHQ sync.
 var BOARD_GRADES = [
   { id: "league", grade_name: "B Grade", sort_order: 1 },
@@ -777,7 +777,8 @@ ${CSS}
 var worker_default = {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const { pathname } = url;
+    // Served at /coaches on the club domain and at the workers.dev root; both map to the same routes.
+    const pathname = url.pathname.replace(/^\/coaches(?=\/|$)/, "") || "/";
     const method = request.method;
     if (method === "OPTIONS") {
       return new Response(null, {
