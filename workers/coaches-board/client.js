@@ -446,6 +446,14 @@ function escapeHtml(v) {
 
 
 // ---------- 2026 compare ----------
+// "2026-04-11" -> "Sat 11 Apr", in Perth time.
+function fmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(String(d).slice(0, 10) + "T12:00:00+08:00");
+  if (isNaN(dt)) return "";
+  return dt.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "Australia/Perth" });
+}
+
 function cmpInitial(name) {
   const parts = String(name || "").trim().split(/\\s+/);
   if (parts.length < 2) return name || "";
