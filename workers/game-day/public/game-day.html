@@ -212,8 +212,14 @@ function renderBanner(grade, selection) {
   banner.innerHTML = `
     <div class="club">COCKBURN LAKES</div>
     <div class="grade">${esc(gradeName)}</div>
-    <div class="round">${esc(selection.round_name || "")}${details ? " · " + esc(details) : ""}</div>
+    <div class="round">${esc(roundLabel(selection.round_name))}${details ? " · " + esc(details) : ""}</div>
     <div class="versus"><span>COCKBURN LAKES</span><span class="vs">VS</span><span>${esc(opponent)}</span></div>`;
+}
+
+// A bare number (e.g. "7") shows as "Round 7". Anything else is shown as saved.
+function roundLabel(name) {
+  const s = String(name || "").trim();
+  return /^\d+$/.test(s) ? "Round " + s : s;
 }
 
 function renderSlot(pos, positions) {
