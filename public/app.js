@@ -46,3 +46,53 @@ if (intro && introVideo) {
   window.setTimeout(closeIntro, 4800);
   introVideo.play().catch(() => {});
 }
+
+// Game day duty checker: member enters their PIN and sees their duty for the latest round.
+(function () {
+  const form = document.getElementById('dutyCheckForm');
+  const result = document.getElementById('dutyCheckResult');
+  if (!form || !result) return;
+  const API = 'https://coaches-board.clfc2027.workers.dev/api/duties/check';
+
+  function show(message, isError) {
+    result.innerHTML = '';
+    result.className = 'duty-check-result' + (isError ? ' err' : '');
+    const p = document.createElement('p');
+    p.textContent = message;
+    result.appendChild(p);
+    return p;
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const pin = document.getElementById('dutyPin').value.trim();
+    if (!/^[0-9]{4}$/.test(pin)) return show('Enter your 4-digit PIN.', true);
+    show('Checking...', false);
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pin })
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) return show(data.error || 'Could not check right now. Try again shortly.', true);
+
+      const venue = data.venue === 'home' ? ' (home)' : data.venue === 'away' ? ' (away)' : '';
+      const first = (data.name || '').split(' ')[0];
+      if (!data.round) return show('Hi ' + first + ', no game day duties have been allocated yet.', false);
+      if (!data.duties.length) {
+        return show('Hi ' + first + ', you are not on game day duty in Round ' + data.round + venue + '.', false);
+      }
+      const p = show('Hi ' + first + ', you are on game day duty in Round ' + data.round + venue + ':', false);
+      const list = document.createElement('ul');
+      data.duties.forEach(function (d) {
+        const li = document.createElement('li');
+        li.textContent = d.grade + ' · ' + d.duty;
+        list.appendChild(li);
+      });
+      result.appendChild(list);
+    } catch (err) {
+      show('Could not check right now. Try again shortly.', true);
+    }
+  });
+})();

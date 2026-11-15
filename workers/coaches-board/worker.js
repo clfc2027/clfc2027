@@ -374,6 +374,76 @@ async function getLatestDuties(flexi) {
   }
 }
 
+// ---------- Game day duty checker (public; a member enters their PIN) ----------
+var DUTY_CHECK_MAX_FAILS = 10;
+var DUTY_CHECK_WINDOW_MS = 15 * 60 * 1000;
+
+// Member PIN -> their duties in the newest round with duties saved. Wrong PINs are counted per IP
+// and blocked for 15 minutes after 10 misses, so the PIN space cannot be walked to list names.
+async function checkDutiesByPin(request, env) {
+  let body = {};
+  try { body = await request.json(); } catch (e) { body = {}; }
+  const pin = typeof body.pin === "string" ? body.pin.trim() : "";
+  if (!/^\d{4}$/.test(pin)) throw httpError("Enter your 4-digit PIN.", 400);
+
+  const flexi = env.FLEXI;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  await flexi.prepare(
+    `CREATE TABLE IF NOT EXISTS duty_pin_attempts (ip TEXT PRIMARY KEY, fails INTEGER NOT NULL, window_start TEXT NOT NULL)`
+  ).run();
+  const att = await flexi.prepare(`SELECT fails, window_start FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).first();
+  const now = Date.now();
+  const inWindow = !!att && now - Date.parse(att.window_start) < DUTY_CHECK_WINDOW_MS;
+  if (inWindow && att.fails >= DUTY_CHECK_MAX_FAILS) {
+    throw httpError("Too many attempts. Try again in 15 minutes.", 429);
+  }
+
+  const member = await env.DB.prepare(
+    `SELECT id, first_name, last_name FROM member_directory WHERE pin = ?1`
+  ).bind(pin).first();
+  if (!member) {
+    const fails = inWindow ? att.fails + 1 : 1;
+    const start = inWindow ? att.window_start : new Date(now).toISOString();
+    await flexi.prepare(
+      `INSERT INTO duty_pin_attempts (ip, fails, window_start) VALUES (?1, ?2, ?3)
+         ON CONFLICT (ip) DO UPDATE SET fails = ?2, window_start = ?3`
+    ).bind(ip, fails, start).run();
+    throw httpError("PIN not recognised.", 401);
+  }
+  await flexi.prepare(`DELETE FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).run();
+
+  const name = (member.first_name + " " + member.last_name).trim();
+  let latest = null;
+  try {
+    latest = await flexi.prepare(
+      `SELECT round_name FROM game_day_allocations WHERE season_year = ?1
+        ORDER BY CAST(round_name AS INTEGER) DESC, round_name DESC LIMIT 1`
+    ).bind(DUTY_SEASON_PUBLIC).first();
+  } catch (e) {
+    if (!/no such table/i.test(e.message)) throw e;
+  }
+  if (!latest) return { ok: true, name, round: null, venue: null, duties: [] };
+
+  const round = latest.round_name;
+  const type = await flexi.prepare(
+    `SELECT venue_type FROM game_day_round_type WHERE season_year = ?1 AND round_name = ?2`
+  ).bind(DUTY_SEASON_PUBLIC, round).first();
+  const { results } = await flexi.prepare(
+    `SELECT grade, task_key FROM game_day_allocations
+      WHERE season_year = ?1 AND round_name = ?2 AND member_id = ?3
+      ORDER BY grade, task_key, slot`
+  ).bind(DUTY_SEASON_PUBLIC, round, member.id).all();
+  const gradeLabel = {};
+  DUTY_PUBLIC_GRADES.forEach((g) => { gradeLabel[g.key] = g.label; });
+  const taskLabel = {};
+  DUTY_PUBLIC_TASKS.forEach((t) => { taskLabel[t.key] = t.label; });
+  const duties = results.map((r) => ({
+    grade: gradeLabel[r.grade] || r.grade,
+    duty: taskLabel[r.task_key] || r.task_key
+  }));
+  return { ok: true, name, round, venue: type ? type.venue_type : null, duties };
+}
+
 // Display rule: the surname only. If two or more players on the same board share a surname,
 // every one of them shows the first name with the surname.
 function surnameOf(full) {
@@ -656,6 +726,9 @@ var worker_default = {
       }
       if (pathname === "/api/duties/latest" && method === "GET") {
         return json(await getLatestDuties(env.FLEXI));
+      }
+      if (pathname === "/api/duties/check" && method === "POST") {
+        return json(await checkDutiesByPin(request, env));
       }
       // Coaches only (PIN in x-coach-pin)
       if (pathname === "/api/players" && method === "GET") {
