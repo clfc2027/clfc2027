@@ -323,11 +323,36 @@ async function getLatestPublished(db, gradeId) {
   if (!latest) return { grade_id: gradeId, grade_name: grade.grade_name, round_name: null, selection: null, positions: {}, interchange: [] };
   return getPublished(db, gradeId, latest.round_name);
 }
+// Display rule: the surname only. If two or more players on the same board share a surname,
+// every one of them shows the first name with the surname.
+function surnameOf(full) {
+  const p = String(full || "").trim().split(/\s+/);
+  return p[p.length - 1] || "";
+}
+function firstNameOf(full) {
+  const p = String(full || "").trim().split(/\s+/);
+  return p.length > 1 ? p.slice(0, -1).join(" ") : "";
+}
+function displayNames(names) {
+  const counts = {};
+  for (const n of names) {
+    const key = surnameOf(n).toLowerCase();
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return names.map((n) => {
+    const s = surnameOf(n);
+    const f = firstNameOf(n);
+    return counts[s.toLowerCase()] > 1 && f ? f + " " + s : s;
+  });
+}
 async function getPublished(db, gradeId, round) {
   if (!gradeId || !round) throw httpError("grade_id and round are required", 400);
   const grade = await assertGrade(db, gradeId);
   const data = await loadSelection(db, gradeId, round);
-  const strip = (card) => (card ? { name: card.name, jumper: card.jumper || null } : null);
+  const cards = [...Object.values(data.positions), ...data.interchange].filter(Boolean);
+  const shown = displayNames(cards.map((c) => c.name));
+  const label = new Map(cards.map((c, i) => [c, shown[i]]));
+  const strip = (card) => (card ? { name: label.get(card) || card.name, jumper: card.jumper || null } : null);
   const positions = {};
   for (const [slot, card] of Object.entries(data.positions)) positions[slot] = strip(card);
   return {

@@ -23,6 +23,33 @@ let state = {
   cmp: { on: false, rounds: [], gameId: "", data: null, open: false, loading: false, syncing: false, progress: "", error: "" },
 };
 
+// Same rule as the server: surname, with the first name where two or more players share a surname.
+function surnameOf(full) {
+  const p = String(full || "").trim().split(/\\s+/);
+  return p[p.length - 1] || "";
+}
+function firstNameOf(full) {
+  const p = String(full || "").trim().split(/\\s+/);
+  return p.length > 1 ? p.slice(0, -1).join(" ") : "";
+}
+function displayNames(names) {
+  const counts = {};
+  for (const n of names) {
+    const key = surnameOf(n).toLowerCase();
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return names.map((n) => {
+    const s = surnameOf(n);
+    const f = firstNameOf(n);
+    return counts[s.toLowerCase()] > 1 && f ? f + " " + s : s;
+  });
+}
+function refreshDisplay() {
+  const cards = [...Object.values(state.positions), ...state.interchange].filter(Boolean);
+  const shown = displayNames(cards.map((c) => c.name));
+  cards.forEach((c, i) => { c.display = shown[i]; });
+}
+
 function currentGrade() {
   return state.grades.find((g) => String(g.grade_id) === String(state.gradeId));
 }
@@ -136,6 +163,7 @@ function gateHtml() {
 }
 
 function render() {
+  refreshDisplay();
   document.body.classList.toggle("presenting", state.presenting);
   const grade = currentGrade();
   const header = \`
@@ -368,7 +396,7 @@ function renderSlot(pos) {
     <div class="slot" style="left:\${pos.x}%; top:\${pos.y}%;">
       <div class="slot-card \${card ? "" : "empty"}" data-slot="\${pos.id}" data-type="field" data-line="\${pos.line}" draggable="\${card ? "true" : "false"}">
         \${card ? '<div class="remove-x" data-remove-slot="' + pos.id + '" data-remove-type="field">\\xD7</div>' : ""}
-        \${card ? \`<div class="pname solo">\${escapeHtml(card.name)}</div>\` : \`<div class="pname solo">Tap to add</div>\`}
+        \${card ? \`<div class="pname solo">\${escapeHtml(card.display || card.name)}</div>\` : \`<div class="pname solo">Tap to add</div>\`}
         <div class="pos-label">\${pos.label}</div>
       </div>
     </div>\`;
@@ -381,7 +409,7 @@ function renderInterchangeSlot(i) {
       <div class="slot-card \${card ? "" : "empty"}" data-slot="\${i}" data-type="interchange" draggable="\${card ? "true" : "false"}">
         \${card ? '<div class="remove-x" data-remove-slot="' + i + '" data-remove-type="interchange">\\xD7</div>' : ""}
         <div class="num">\${i + 1}</div>
-        \${card ? \`<div class="pname ic-name">\${escapeHtml(card.name)}</div>\` : '<div class="pname">Add player</div>'}
+        \${card ? \`<div class="pname ic-name">\${escapeHtml(card.display || card.name)}</div>\` : '<div class="pname">Add player</div>'}
       </div>
     </div>\`;
 }
@@ -684,13 +712,11 @@ async function runPlayerSearch(q) {
     box.querySelectorAll("[data-mid]").forEach((row, i) => {
       row.onclick = () => {
         const player = filtered[i];
-        // The board shows the surname only, with no number.
-        const parts = String(player.name || "").trim().split(/\\s+/);
-        const surname = player.last_name || parts[parts.length - 1] || player.name;
+        // Stores the full name. The board shows the surname, with the first name where needed.
         setSlotValue(state.activeSlot.type, state.activeSlot.slot, {
           member_id: player.member_id,
           playhq_player_id: player.playhq_player_id,
-          name: surname,
+          name: player.name,
           jumper: null,
         });
         closeSelector();
