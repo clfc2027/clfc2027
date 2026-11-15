@@ -269,18 +269,8 @@ async function loadBoard() {
       return;
     }
 
-    // The most recently saved round for this grade is the one shown.
-    const { history } = await getJson("/api/history?team_id=" + encodeURIComponent(grade.team_id));
-    if (!history || !history.length) {
-      render(grade, null, {}, []);
-      setStatus("");
-      return;
-    }
-
-    const round = history[0].round_name;
-    const data = await getJson(
-      "/api/team?team_id=" + encodeURIComponent(grade.team_id) + "&round=" + encodeURIComponent(round)
-    );
+    // The most recently saved round for this grade (public endpoint, names and jumpers only).
+    const data = await getJson("/api/published/latest?grade_id=" + encodeURIComponent(grade.grade_id));
     if (!data.selection) {
       render(grade, null, {}, []);
       setStatus("");

@@ -7,7 +7,7 @@ const GRADES = {
   league:   { pageName: "Game Day League",   gradeMatch: "B Grade" },
   colts:    { pageName: "Game Day Colts",    gradeMatch: "Colts" },
   reserves: { pageName: "Game Day Reserves", gradeMatch: "B Reserves" },
-  thirds:   { pageName: "Game Day Thirds",   gradeMatch: "E2 South" },
+  thirds:   { pageName: "Game Day Thirds",   gradeMatch: "Thirds" },
 };
 
 export default {

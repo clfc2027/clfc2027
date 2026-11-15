@@ -32,6 +32,14 @@ var BOARD_GRADES = [
   { id: "thirds", grade_name: "Thirds", sort_order: 4 }
 ];
 // Shared coaches PIN, kept in the COACH_PIN secret. A missing secret keeps the board locked.
+// 2026 compare: each board reads last year's team from PlayHQ on request. Nothing is copied from the main database.
+var COMPARE_YEAR = 2026;
+var COMPARE_TEAMS = {
+  league: { name: "Cockburn Lakes (B)", playhq_team_id: "046b90e4-54e4-4bf7-af9f-955b8ae7981e" },
+  reserves: { name: "Cockburn Lakes (BR)", playhq_team_id: "5bf15ff7-0818-4082-9177-d88d822a99fc" },
+  colts: { name: "Cockburn Lakes (DBC)", playhq_team_id: "a95954ed-ff52-4e15-82a3-80a9417d2a32" },
+  thirds: { name: "Cockburn Lakes (E2S)", playhq_team_id: "696edf4b-d7e4-44bc-ae14-129cb746fc25" }
+};
 var PIN_MAX_FAILS = 5;
 var PIN_LOCK_MINUTES = 15;
 var boardReady = false;
@@ -197,8 +205,8 @@ async function verifyBoardPin(env, db, pin) {
 // Every coach-facing read and write checks the grade exists and the shared PIN.
 async function requireCoach(request, env, gradeId) {
   if (!gradeId) throw httpError("grade_id is required", 400);
-  await assertGrade(env.DB, gradeId);
-  await verifyBoardPin(env, env.DB, request.headers.get("x-coach-pin") || "");
+  await assertGrade(env.FLEXI, gradeId);
+  await verifyBoardPin(env, env.FLEXI, request.headers.get("x-coach-pin") || "");
 }
 
 async function getGrades(db) {
@@ -306,6 +314,15 @@ async function deleteSelection(db, gradeId, round) {
 }
 
 // Public read for the grade pages: the saved team names only, never PINs or member IDs.
+// The most recently saved round for a grade. Public, names and jumpers only.
+async function getLatestPublished(db, gradeId) {
+  const grade = await assertGrade(db, gradeId);
+  const latest = await db.prepare(
+    `SELECT round_name FROM board_selections WHERE grade_id = ?1 ORDER BY updated_at DESC, id DESC LIMIT 1`
+  ).bind(gradeId).first();
+  if (!latest) return { grade_id: gradeId, grade_name: grade.grade_name, round_name: null, selection: null, positions: {}, interchange: [] };
+  return getPublished(db, gradeId, latest.round_name);
+}
 async function getPublished(db, gradeId, round) {
   if (!gradeId || !round) throw httpError("grade_id and round are required", 400);
   const grade = await assertGrade(db, gradeId);
@@ -319,6 +336,7 @@ async function getPublished(db, gradeId, round) {
     round_name: round,
     selection: data.selection
       ? {
+          round_name: round,
           opponent_name: data.selection.opponent_name,
           match_date: data.selection.match_date,
           venue_name: data.selection.venue_name,
@@ -328,6 +346,183 @@ async function getPublished(db, gradeId, round) {
     positions,
     interchange: data.interchange.map(strip)
   };
+}
+
+// ---------- 2026 compare (PlayHQ on request, stored in clfc2026-flexi) ----------
+var PLAYHQ_BASE = "https://api.playhq.com";
+var compareReady = false;
+async function ensureCompareTables(db) {
+  if (compareReady) return;
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS compare_fixtures (
+       playhq_game_id TEXT PRIMARY KEY,
+       team_key TEXT NOT NULL,
+       round_name TEXT,
+       opponent_name TEXT,
+       game_date TEXT,
+       venue_name TEXT,
+       status TEXT,
+       fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
+     )`
+  ).run();
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS compare_results (
+       game_id TEXT PRIMARY KEY,
+       outcome TEXT,
+       our_name TEXT, our_goals INTEGER, our_behinds INTEGER, our_score INTEGER,
+       opp_name TEXT, opp_goals INTEGER, opp_behinds INTEGER, opp_score INTEGER,
+       opp_players TEXT,
+       synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+     )`
+  ).run();
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS compare_sheets (
+       game_id TEXT PRIMARY KEY,
+       player_count INTEGER NOT NULL,
+       players TEXT NOT NULL,
+       synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+     )`
+  ).run();
+  compareReady = true;
+}
+function compareTeamFor(gradeId) {
+  const team = COMPARE_TEAMS[gradeId];
+  if (!team) throw httpError("No 2026 team is set up for this board", 404);
+  return team;
+}
+function needApiKey(apiKey) {
+  if (!apiKey) throw httpError("PLAYHQ_API_KEY secret is not set on the coaches-board worker", 503);
+}
+async function playhq(endpoint, apiKey, version = "v1") {
+  const res = await fetch(`${PLAYHQ_BASE}/${version}${endpoint}`, {
+    headers: { "x-api-key": apiKey, "x-phq-tenant": "afl", "Accept": "application/json" }
+  });
+  if (!res.ok) throw httpError(`PlayHQ ${res.status}: ${res.statusText}`, 502);
+  return res.json();
+}
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+// Reads the 2026 fixture feed from PlayHQ and stores the games. Each request writes what it fetched.
+async function fetchCompareFixtures(db, apiKey, gradeId) {
+  needApiKey(apiKey);
+  await ensureCompareTables(db);
+  const team = compareTeamFor(gradeId);
+  const data = await playhq(`/teams/${team.playhq_team_id}/fixture`, apiKey);
+  const fixtures = (data.data || []).filter((f) => f.round?.name);
+  const stmts = fixtures.map((f) => {
+    const opponent = f.competitors?.find((c) => c.id !== team.playhq_team_id);
+    return db.prepare(
+      `INSERT INTO compare_fixtures (playhq_game_id, team_key, round_name, opponent_name, game_date, venue_name, status, fetched_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+       ON CONFLICT(playhq_game_id) DO UPDATE SET team_key = excluded.team_key, round_name = excluded.round_name,
+         opponent_name = excluded.opponent_name, game_date = excluded.game_date, venue_name = excluded.venue_name,
+         status = excluded.status, fetched_at = CURRENT_TIMESTAMP`
+    ).bind(f.id, gradeId, f.round.name, opponent?.name || null, f.schedule?.date || null, f.venue?.name || null, f.status || null);
+  });
+  if (stmts.length) await db.batch(stmts);
+  return { team, fixtures, opponentOf: (f) => f.competitors?.find((c) => c.id !== team.playhq_team_id) };
+}
+async function getCompareRounds(db, apiKey, gradeId) {
+  await fetchCompareFixtures(db, apiKey, gradeId);
+  const { results } = await db.prepare(
+    `SELECT f.playhq_game_id AS game_id, f.round_name, f.opponent_name, f.game_date, f.venue_name, f.status,
+            COALESCE((SELECT cs.player_count FROM compare_sheets cs WHERE cs.game_id = f.playhq_game_id), 0) AS players,
+            r.outcome, r.our_score, r.opp_score,
+            CASE WHEN r.game_id IS NULL THEN 0 ELSE 1 END AS has_result
+       FROM compare_fixtures f
+       LEFT JOIN compare_results r ON r.game_id = f.playhq_game_id
+      WHERE f.team_key = ?1
+      ORDER BY f.game_date ASC`
+  ).bind(gradeId).all();
+  return { year: COMPARE_YEAR, team_name: compareTeamFor(gradeId).name, rounds: results };
+}
+// Only reads what was stored by a request. Never reads or writes the official team sheet tables.
+async function getCompareSheet(db, gameId) {
+  await ensureCompareTables(db);
+  const game = await db.prepare(
+    `SELECT playhq_game_id AS game_id, round_name, opponent_name, game_date, venue_name, status, team_key
+       FROM compare_fixtures WHERE playhq_game_id = ?1`
+  ).bind(gameId || "").first();
+  if (!game) throw httpError("Game not found. Open the round list first.", 404);
+  const own = await db.prepare(`SELECT players FROM compare_sheets WHERE game_id = ?1`).bind(gameId).first();
+  const players = own ? JSON.parse(own.players || "[]") : [];
+  players.sort((a, b) => (a.emergency === b.emergency ? 0 : a.emergency ? 1 : -1) || (parseInt(a.jumper) || 999) - (parseInt(b.jumper) || 999));
+  const r = await db.prepare(`SELECT * FROM compare_results WHERE game_id = ?1`).bind(gameId).first();
+  let result = null;
+  let opposition = null;
+  if (r) {
+    result = {
+      outcome: r.outcome,
+      our: { name: r.our_name, goals: r.our_goals, behinds: r.our_behinds, score: r.our_score },
+      opp: { name: r.opp_name, goals: r.opp_goals, behinds: r.opp_behinds, score: r.opp_score }
+    };
+    try { opposition = JSON.parse(r.opp_players || "[]"); } catch (e) { opposition = []; }
+  }
+  return { game: { ...game, season_year: COMPARE_YEAR, team_name: compareTeamFor(game.team_key).name }, players, result, opposition };
+}
+// Pulls one 2026 game's summary and fixture result from PlayHQ and stores it in clfc2026-flexi.
+async function syncCompareGame(db, apiKey, gameId, gradeId) {
+  needApiKey(apiKey);
+  await ensureCompareTables(db);
+  const team = compareTeamFor(gradeId);
+  const fixtureFeed = await playhq(`/teams/${team.playhq_team_id}/fixture`, apiKey);
+  const fx = (fixtureFeed.data || []).find((g) => g.id === gameId);
+  if (!fx || !fx.round?.name) throw httpError("Game not found in the 2026 fixtures for this grade", 404);
+  const summary = await playhq(`/games/${gameId}/summary`, apiKey, "v2");
+
+  const appearances = summary.data?.appearances || [];
+  const ours = appearances.filter((a) => a.teamId === team.playhq_team_id);
+  const theirs = appearances.filter((a) => a.teamId !== team.playhq_team_id && (a.roleType || "Player") === "Player");
+  const sumTeams = summary.data?.teams || [];
+  const comps = fx.competitors || [];
+  const sub = (c, type) => c?.scoreSubTotal?.find((s) => s.type === type)?.value ?? null;
+  const usC = comps.find((c) => c.id === team.playhq_team_id);
+  const themC = comps.find((c) => c.id !== team.playhq_team_id);
+  const usT = sumTeams.find((t) => t.id === team.playhq_team_id);
+  const themT = sumTeams.find((t) => t.id !== team.playhq_team_id);
+  const oppPlayers = theirs
+    .map((a) => ({
+      playhq_player_id: a.id || null,
+      name: `${(a.firstName || "").trim()} ${(a.lastName || "").trim()}`.trim(),
+      jumper: a.playerNumber || null,
+      captain: a.captainRole || null,
+      fill_in: !!a.isFillIn,
+      emergency: !!a.isEmergency
+    }))
+    .sort((a, b) => (parseInt(a.jumper) || 999) - (parseInt(b.jumper) || 999));
+  const sheet = ours.map((a) => ({
+    playhq_player_id: a.id || null,
+    name: `${(a.firstName || "").trim()} ${(a.lastName || "").trim()}`.trim(),
+    jumper: a.playerNumber || null,
+    captain: a.captainRole || null,
+    emergency: !!a.isEmergency,
+    fill_in: !!a.isFillIn,
+    role_type: a.roleType || "Player"
+  }));
+  const playerCount = sheet.filter((p) => p.role_type === "Player").length;
+
+  const resultStmt = db.prepare(
+    `INSERT INTO compare_results
+       (game_id, outcome, our_name, our_goals, our_behinds, our_score, opp_name, opp_goals, opp_behinds, opp_score, opp_players, synced_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CURRENT_TIMESTAMP)
+     ON CONFLICT(game_id) DO UPDATE SET
+       outcome = excluded.outcome, our_name = excluded.our_name, our_goals = excluded.our_goals, our_behinds = excluded.our_behinds,
+       our_score = excluded.our_score, opp_name = excluded.opp_name, opp_goals = excluded.opp_goals, opp_behinds = excluded.opp_behinds,
+       opp_score = excluded.opp_score, opp_players = excluded.opp_players, synced_at = CURRENT_TIMESTAMP`
+  ).bind(
+    gameId, usC?.outcome || usT?.outcome || null,
+    usC?.name || usT?.name || null, sub(usC, "TOTAL_GOALS"), sub(usC, "TOTAL_BEHINDS"), usC?.scoreTotal ?? null,
+    themC?.name || themT?.name || null, sub(themC, "TOTAL_GOALS"), sub(themC, "TOTAL_BEHINDS"), themC?.scoreTotal ?? null,
+    JSON.stringify(oppPlayers)
+  );
+  const sheetStmt = db.prepare(
+    `INSERT INTO compare_sheets (game_id, player_count, players, synced_at) VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+     ON CONFLICT(game_id) DO UPDATE SET player_count = excluded.player_count, players = excluded.players, synced_at = CURRENT_TIMESTAMP`
+  ).bind(gameId, playerCount, JSON.stringify(sheet));
+  await db.batch([resultStmt, sheetStmt]);
+  return { game_id: gameId, round_name: fx.round.name, status: ours.length ? "UPDATED" : "NO_TEAM_SHEET", players: playerCount, has_result: 1 };
 }
 
 function renderApp(hubUrl) {
@@ -347,6 +542,7 @@ ${CSS}
     window.__POSITIONS__ = ${JSON.stringify(POSITIONS)};
     window.__INTERCHANGE_COUNT__ = ${INTERCHANGE_COUNT};
     window.__HUB_URL__ = ${JSON.stringify(hubUrl)};
+    window.__COMPARE_YEAR__ = ${COMPARE_YEAR};
   </script>
   <script>${JS}</script>
 </body>
@@ -370,14 +566,17 @@ var worker_default = {
     try {
       // Public
       if (pathname === "/" || pathname === "/board") return html(renderApp(env.HUB_URL || HUB_URL));
-      if (pathname === "/api/grades") return json(await getGrades(env.DB));
+      if (pathname === "/api/grades") return json(await getGrades(env.FLEXI));
       if (pathname === "/api/coach/verify" && method === "POST") {
         const { pin } = await request.json();
-        await verifyBoardPin(env, env.DB, pin);
+        await verifyBoardPin(env, env.FLEXI, pin);
         return json({ ok: true });
       }
+      if (pathname === "/api/published/latest" && method === "GET") {
+        return json(await getLatestPublished(env.FLEXI, url.searchParams.get("grade_id")));
+      }
       if (pathname === "/api/published" && method === "GET") {
-        return json(await getPublished(env.DB, url.searchParams.get("grade_id"), url.searchParams.get("round")));
+        return json(await getPublished(env.FLEXI, url.searchParams.get("grade_id"), url.searchParams.get("round")));
       }
       // Coaches only (PIN in x-coach-pin)
       if (pathname === "/api/players" && method === "GET") {
@@ -388,28 +587,43 @@ var worker_default = {
       if (pathname === "/api/rounds" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");
         await requireCoach(request, env, gradeId);
-        return json(await getSavedRounds(env.DB, gradeId));
+        return json(await getSavedRounds(env.FLEXI, gradeId));
       }
       if (pathname === "/api/team" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");
         const round = url.searchParams.get("round");
         await requireCoach(request, env, gradeId);
         if (!round) return json({ error: "round is required" }, 400);
-        return json(await loadSelection(env.DB, gradeId, round));
+        return json(await loadSelection(env.FLEXI, gradeId, round));
       }
       if (pathname === "/api/team" && (method === "POST" || method === "PUT")) {
         const payload = await request.json();
         await requireCoach(request, env, payload.grade_id);
-        return json(await saveSelection(env.DB, payload));
+        return json(await saveSelection(env.FLEXI, payload));
       }
       if (pathname === "/api/team" && method === "DELETE") {
         const gradeId = url.searchParams.get("grade_id");
         const round = url.searchParams.get("round");
         await requireCoach(request, env, gradeId);
         if (!round) return json({ error: "round is required" }, 400);
-        return json(await deleteSelection(env.DB, gradeId, round));
+        return json(await deleteSelection(env.FLEXI, gradeId, round));
       }
 
+      if (pathname === "/api/compare/rounds" && method === "GET") {
+        const gradeId = url.searchParams.get("grade_id");
+        await requireCoach(request, env, gradeId);
+        return json(await getCompareRounds(env.FLEXI, env.PLAYHQ_API_KEY, gradeId));
+      }
+      if (pathname === "/api/compare/sheet" && method === "GET") {
+        const gradeId = url.searchParams.get("grade_id");
+        await requireCoach(request, env, gradeId);
+        return json(await getCompareSheet(env.FLEXI, url.searchParams.get("game_id")));
+      }
+      if (pathname === "/api/compare/sync-game" && method === "POST") {
+        const payload = await request.json();
+        await requireCoach(request, env, payload.grade_id);
+        return json(await syncCompareGame(env.FLEXI, env.PLAYHQ_API_KEY, payload.game_id, payload.grade_id));
+      }
       return json({ error: "Not found" }, 404);
     } catch (err) {
       return json({ error: err.message || "Server error" }, err.status || 500);

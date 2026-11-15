@@ -8,5 +8,11 @@ binding = "DB"
 database_name = "playhq-warriors" # TODO: confirm in Settings > Bindings
 database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
 
+# The coaches board's own data (selections, PIN state, 2026 compare). Nothing else writes here.
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
 # Variable (dashboard): HUB_URL
 # Secrets (dashboard, not in this file): PLAYHQ_API_KEY, ADMIN_PASSCODE
