@@ -11,6 +11,7 @@ let state = {
   round: "",
   opponent: "",
   matchDate: "",
+  matchTime: "",
   venue: "",
   positions: {},
   interchange: Array(IC_COUNT).fill(null),
@@ -130,6 +131,7 @@ function resetBoard() {
   state.round = "";
   state.opponent = "";
   state.matchDate = "";
+  state.matchTime = "";
   state.venue = "";
 }
 
@@ -215,6 +217,10 @@ function render() {
       <div class="field">
         <label>Match date</label>
         <input id="dateInput" type="date" value="\${escapeAttr(state.matchDate)}">
+      </div>
+      <div class="field">
+        <label>Match time</label>
+        <input id="timeInput" type="time" value="\${escapeAttr(state.matchTime)}">
       </div>
       <div class="action-buttons action-buttons-wrap">
         <button class="btn-ghost" id="loadBtn">Load</button>
@@ -325,6 +331,8 @@ function bindEvents() {
 
   const dateInput = document.getElementById("dateInput");
   if (dateInput) dateInput.oninput = (e) => (state.matchDate = e.target.value);
+  const timeInput = document.getElementById("timeInput");
+  if (timeInput) timeInput.oninput = (e) => (state.matchTime = e.target.value);
 
   const loadBtn = document.getElementById("loadBtn");
   if (loadBtn) loadBtn.onclick = loadSelection;
@@ -743,12 +751,14 @@ async function autoPickRound() {
     state.round = next.round_name;
     state.opponent = next.opponent_name || "";
     state.matchDate = (next.match_date || "").slice(0, 10);
+    state.matchTime = (next.match_time || "").slice(0, 5);
     state.venue = next.venue_name || "";
     const data = await api("/api/team?grade_id=" + encodeURIComponent(gradeAtStart) + "&round=" + encodeURIComponent(state.round));
     if (state.gradeId !== gradeAtStart) return;
     if (data.selection) {
       state.opponent = data.selection.opponent_name || state.opponent;
       state.matchDate = (data.selection.match_date || state.matchDate).slice(0, 10);
+      state.matchTime = (data.selection.match_time || state.matchTime).slice(0, 5);
       state.venue = data.selection.venue_name || state.venue;
       state.positions = data.positions || {};
       state.interchange = Array(IC_COUNT).fill(null).map((_, i) => data.interchange[i] || null);
@@ -766,7 +776,7 @@ async function loadRoundSuggestions() {
     const box = document.getElementById("roundSuggest");
     if (!rounds.length) return;
     box.innerHTML = rounds
-      .map((r) => \`<div data-round="\${escapeAttr(r.round_name)}" data-opp="\${escapeAttr(r.opponent_name || "")}" data-date="\${escapeAttr((r.match_date || "").slice(0, 10))}" data-venue="\${escapeAttr(r.venue_name || "")}">\${escapeHtml(r.round_name)}\${r.opponent_name ? " · " + escapeHtml(r.opponent_name) : ""}</div>\`)
+      .map((r) => \`<div data-round="\${escapeAttr(r.round_name)}" data-opp="\${escapeAttr(r.opponent_name || "")}" data-date="\${escapeAttr((r.match_date || "").slice(0, 10))}" data-time="\${escapeAttr((r.match_time || "").slice(0, 5))}" data-venue="\${escapeAttr(r.venue_name || "")}">\${escapeHtml(r.round_name)}\${r.opponent_name ? " · " + escapeHtml(r.opponent_name) : ""}</div>\`)
       .join("");
     box.style.display = "block";
     box.querySelectorAll("[data-round]").forEach((row) => {
@@ -774,6 +784,7 @@ async function loadRoundSuggestions() {
         state.round = row.dataset.round;
         state.opponent = row.dataset.opp || state.opponent;
         state.matchDate = row.dataset.date || "";
+        state.matchTime = row.dataset.time || "";
         state.venue = row.dataset.venue || state.venue;
         box.style.display = "none";
         render();
@@ -797,6 +808,7 @@ async function loadSelection() {
     }
     state.opponent = data.selection.opponent_name || "";
     state.matchDate = (data.selection.match_date || "").slice(0, 10);
+    state.matchTime = (data.selection.match_time || "").slice(0, 5);
     state.venue = data.selection.venue_name || "";
     state.positions = data.positions || {};
     state.interchange = Array(IC_COUNT).fill(null).map((_, i) => data.interchange[i] || null);
@@ -819,6 +831,7 @@ async function saveSelection() {
       round_name: state.round.trim(),
       opponent_name: state.opponent.trim() || null,
       match_date: state.matchDate || null,
+      match_time: state.matchTime || null,
       venue_name: state.venue || null,
       status: "saved",
       positions: state.positions,
