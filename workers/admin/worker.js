@@ -873,7 +873,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 <div class="container" id="app">
 <header>
-<a id="backBtn" href="https://clfc2027.clfc2027.workers.dev/">← Hub</a>
+<a id="backBtn" href="/">← Hub</a>
 <h1>PlayHQ Admin</h1>
 <p>Warriors Hub</p>
 <button id="logoutBtn" type="button">Lock</button>

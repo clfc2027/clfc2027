@@ -38,6 +38,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
   .msg.err { color: var(--red); }
   .admin-btn { display: inline-block; margin-top: 10px; color: #fff; border: 1px solid #fff; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: .9rem; }
   .rules { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
+  .hub-btn { display: inline-block; margin: 10px 0 0 8px; background: #fff; color: var(--navy); text-decoration: none; font-weight: 700; padding: 6px 12px; border-radius: 6px; font-size: .9rem; }
 </style>
 </head>
 <body>
@@ -45,6 +46,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
   <h1>Weekly Fines</h1>
   <p>Cockburn Lakes FC. Each fine is $2. Nominations are anonymous.</p>
   <a class="admin-btn" href="/fines/admin">Admin</a>
+  <a class="hub-btn" href="/">&larr; Return to hub</a>
 </header>
 <main>
   <section>
@@ -216,10 +218,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
   .msg.ok { color: var(--green); }
   .filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hub-btn { display: inline-block; margin: 0 0 12px 0; background: #fff; color: var(--navy); text-decoration: none; font-weight: 700; padding: 6px 12px; border-radius: 6px; font-size: .9rem; }
 </style>
 </head>
 <body>
-<header><h1>Weekly Fines admin</h1></header>
+<header><h1>Weekly Fines admin</h1><a class="hub-btn" href="/">&larr; Return to hub</a></header>
 <main>
   <section id="login">
     <label for="pass">Admin passcode</label>
