@@ -24,9 +24,6 @@ var POSITIONS = [
 ];
 var INTERCHANGE_COUNT = 4;
 var HUB_URL = "https://clfc2027.clfc2027.workers.dev/";
-// Coach PIN lockout: after this many wrong PINs in a row, the grade is locked for a while.
-var PIN_MAX_FAILS = 5;
-var PIN_LOCK_MINUTES = 15;
 // The four boards. They live in this Worker's own tables, so they exist before any PlayHQ sync.
 var BOARD_GRADES = [
   { id: "league", grade_name: "B Grade", sort_order: 1 },
@@ -34,6 +31,9 @@ var BOARD_GRADES = [
   { id: "colts", grade_name: "Colts", sort_order: 3 },
   { id: "thirds", grade_name: "Thirds", sort_order: 4 }
 ];
+// Shared coaches PIN, kept in the COACH_PIN secret. A missing secret keeps the board locked.
+var PIN_MAX_FAILS = 5;
+var PIN_LOCK_MINUTES = 15;
 var boardReady = false;
 
 function json(data, status = 200) {
@@ -111,19 +111,6 @@ function hexOf(buffer) {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function randomSalt() {
-  return hexOf(crypto.getRandomValues(new Uint8Array(16)));
-}
-
-async function hashPin(salt, pin) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + ":" + pin));
-  return hexOf(digest);
-}
-
-function validPin(pin) {
-  return typeof pin === "string" && /^\d{4}$/.test(pin);
-}
-
 // Creates the board tables on first use and seeds the four grades.
 async function ensureBoard(db) {
   if (boardReady) return;
@@ -132,16 +119,6 @@ async function ensureBoard(db) {
        id TEXT PRIMARY KEY,
        grade_name TEXT NOT NULL,
        sort_order INTEGER NOT NULL
-     )`
-  ).run();
-  await db.prepare(
-    `CREATE TABLE IF NOT EXISTS board_coach_pins (
-       grade_id TEXT PRIMARY KEY REFERENCES board_grades(id),
-       salt TEXT NOT NULL,
-       pin_hash TEXT NOT NULL,
-       failed_attempts INTEGER NOT NULL DEFAULT 0,
-       locked_until TEXT,
-       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
      )`
   ).run();
   await db.prepare(
@@ -171,6 +148,14 @@ async function ensureBoard(db) {
        UNIQUE(selection_id, slot)
      )`
   ).run();
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS board_pin_state (
+       id INTEGER PRIMARY KEY CHECK (id = 1),
+       failed_attempts INTEGER NOT NULL DEFAULT 0,
+       locked_until TEXT
+     )`
+  ).run();
+  await db.prepare(`INSERT OR IGNORE INTO board_pin_state (id, failed_attempts) VALUES (1, 0)`).run();
   for (const g of BOARD_GRADES) {
     await db.prepare(
       `INSERT OR IGNORE INTO board_grades (id, grade_name, sort_order) VALUES (?1, ?2, ?3)`
@@ -186,66 +171,34 @@ async function assertGrade(db, gradeId) {
   return row;
 }
 
-// Fails closed: a grade with no PIN set cannot be opened by anyone.
-async function verifyCoachPin(db, gradeId, pin) {
+// Checks the shared coaches PIN against the COACH_PIN secret. Fails closed if the secret is missing.
+async function verifyBoardPin(env, db, pin) {
+  if (!env.COACH_PIN) throw httpError("The coaches PIN is not set up on the server", 500);
   await ensureBoard(db);
-  const row = await db.prepare(
-    `SELECT salt, pin_hash, failed_attempts, locked_until FROM board_coach_pins WHERE grade_id = ?1`
-  ).bind(gradeId).first();
-  if (!row) throw httpError("No coach PIN has been set for this grade yet", 403);
+  const row = await db.prepare(`SELECT failed_attempts, locked_until FROM board_pin_state WHERE id = 1`).first();
   if (row.locked_until && new Date(row.locked_until) > new Date()) {
     throw httpError("Too many wrong PINs. Try again in a few minutes.", 429);
   }
-  const given = await hashPin(row.salt, typeof pin === "string" ? pin : "");
-  if (constantTimeEqual(given, row.pin_hash)) {
-    if (row.failed_attempts) {
-      await db.prepare(`UPDATE board_coach_pins SET failed_attempts = 0, locked_until = NULL WHERE grade_id = ?1`).bind(gradeId).run();
-    }
+  const given = typeof pin === "string" ? pin : "";
+  if (constantTimeEqual(given, env.COACH_PIN)) {
+    await db.prepare(`UPDATE board_pin_state SET failed_attempts = 0, locked_until = NULL WHERE id = 1`).run();
     return;
   }
   const fails = row.failed_attempts + 1;
   if (fails >= PIN_MAX_FAILS) {
     const until = new Date(Date.now() + PIN_LOCK_MINUTES * 60000).toISOString();
-    await db.prepare(`UPDATE board_coach_pins SET failed_attempts = 0, locked_until = ?1 WHERE grade_id = ?2`).bind(until, gradeId).run();
+    await db.prepare(`UPDATE board_pin_state SET failed_attempts = 0, locked_until = ?1 WHERE id = 1`).bind(until).run();
   } else {
-    await db.prepare(`UPDATE board_coach_pins SET failed_attempts = ?1 WHERE grade_id = ?2`).bind(fails, gradeId).run();
+    await db.prepare(`UPDATE board_pin_state SET failed_attempts = ?1 WHERE id = 1`).bind(fails).run();
   }
   throw httpError("Wrong PIN", 401);
 }
 
-// Every coach-facing read and write goes through here: the grade must exist and the PIN for it must match.
-async function requireCoach(request, db, gradeId) {
+// Every coach-facing read and write checks the grade exists and the shared PIN.
+async function requireCoach(request, env, gradeId) {
   if (!gradeId) throw httpError("grade_id is required", 400);
-  await assertGrade(db, gradeId);
-  await verifyCoachPin(db, gradeId, request.headers.get("x-coach-pin") || "");
-}
-
-async function setCoachPin(db, gradeId, pin) {
-  if (!gradeId) throw httpError("grade_id is required", 400);
-  if (!validPin(pin)) throw httpError("PIN must be exactly 4 digits", 400);
-  await assertGrade(db, gradeId);
-  const salt = randomSalt();
-  const hash = await hashPin(salt, pin);
-  await db.prepare(
-    `INSERT INTO board_coach_pins (grade_id, salt, pin_hash, failed_attempts, locked_until, updated_at)
-       VALUES (?1, ?2, ?3, 0, NULL, CURRENT_TIMESTAMP)
-     ON CONFLICT(grade_id) DO UPDATE SET
-       salt = excluded.salt, pin_hash = excluded.pin_hash,
-       failed_attempts = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP`
-  ).bind(gradeId, salt, hash).run();
-  return { ok: true };
-}
-
-async function listCoachPins(db) {
-  await ensureBoard(db);
-  const { results } = await db.prepare(
-    `SELECT g.id AS grade_id, g.grade_name,
-            CASE WHEN p.grade_id IS NULL THEN 0 ELSE 1 END AS has_pin
-       FROM board_grades g
-       LEFT JOIN board_coach_pins p ON p.grade_id = g.id
-      ORDER BY g.sort_order`
-  ).all();
-  return { grades: results };
+  await assertGrade(env.DB, gradeId);
+  await verifyBoardPin(env, env.DB, request.headers.get("x-coach-pin") || "");
 }
 
 async function getGrades(db) {
@@ -418,56 +371,43 @@ var worker_default = {
       // Public
       if (pathname === "/" || pathname === "/board") return html(renderApp(env.HUB_URL || HUB_URL));
       if (pathname === "/api/grades") return json(await getGrades(env.DB));
+      if (pathname === "/api/coach/verify" && method === "POST") {
+        const { pin } = await request.json();
+        await verifyBoardPin(env, env.DB, pin);
+        return json({ ok: true });
+      }
       if (pathname === "/api/published" && method === "GET") {
         return json(await getPublished(env.DB, url.searchParams.get("grade_id"), url.searchParams.get("round")));
       }
-      if (pathname === "/api/coach/verify" && method === "POST") {
-        const { grade_id, pin } = await request.json();
-        await assertGrade(env.DB, grade_id);
-        await verifyCoachPin(env.DB, grade_id, pin);
-        return json({ ok: true });
-      }
-
-      // Coaches only (PIN for the grade in x-coach-pin)
+      // Coaches only (PIN in x-coach-pin)
       if (pathname === "/api/players" && method === "GET") {
-        await requireCoach(request, env.DB, url.searchParams.get("grade_id"));
+        await requireCoach(request, env, url.searchParams.get("grade_id"));
         const search = (url.searchParams.get("search") || "").trim();
         return json(await searchPlayers(env.DB, search));
       }
       if (pathname === "/api/rounds" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");
-        await requireCoach(request, env.DB, gradeId);
+        await requireCoach(request, env, gradeId);
         return json(await getSavedRounds(env.DB, gradeId));
       }
       if (pathname === "/api/team" && method === "GET") {
         const gradeId = url.searchParams.get("grade_id");
         const round = url.searchParams.get("round");
-        await requireCoach(request, env.DB, gradeId);
+        await requireCoach(request, env, gradeId);
         if (!round) return json({ error: "round is required" }, 400);
         return json(await loadSelection(env.DB, gradeId, round));
       }
       if (pathname === "/api/team" && (method === "POST" || method === "PUT")) {
         const payload = await request.json();
-        await requireCoach(request, env.DB, payload.grade_id);
+        await requireCoach(request, env, payload.grade_id);
         return json(await saveSelection(env.DB, payload));
       }
       if (pathname === "/api/team" && method === "DELETE") {
         const gradeId = url.searchParams.get("grade_id");
         const round = url.searchParams.get("round");
-        await requireCoach(request, env.DB, gradeId);
+        await requireCoach(request, env, gradeId);
         if (!round) return json({ error: "round is required" }, 400);
         return json(await deleteSelection(env.DB, gradeId, round));
-      }
-
-      // Admin only (ADMIN_PASSCODE): set and check each grade's coach PIN
-      if (pathname === "/api/admin/coach-pins" && method === "GET") {
-        requireAdmin(request, env);
-        return json(await listCoachPins(env.DB));
-      }
-      if (pathname === "/api/admin/coach-pin" && method === "POST") {
-        requireAdmin(request, env);
-        const { grade_id, pin } = await request.json();
-        return json(await setCoachPin(env.DB, grade_id, pin));
       }
 
       return json({ error: "Not found" }, 404);
