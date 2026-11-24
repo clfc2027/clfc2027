@@ -125,8 +125,8 @@ export function gatePage(message = "") {
   <p>Enter your 4-digit PIN to open the club hub.</p>
   <form id="form" method="post" action="/gate/login" autocomplete="off">
     <label for="pin">Your PIN</label>
-    <input id="pin" name="pin" type="tel" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
-    <button id="submit" type="submit">Enter</button>
+        <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+        <button id="submit" type="submit">Enter</button>
     <div class="msg" id="msg" role="status">${message}</div>
   </form>
   <p class="request-hint">Don't have a PIN yet?</p>
