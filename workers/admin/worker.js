@@ -1307,7 +1307,7 @@ function renderDutyReview() {
     var c = dutyCounts[key];
     var games = c.games_rounds.length;
     var duties = c.total;
-    return { name: c.name || key, games: games, duties: duties, credited: (c.credited_rounds || []).length,
+    return { name: c.name || key, games: games, duties: duties,
       perGame: games ? duties / games : null,
       rounds: Object.keys(c.duty_rounds).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return a - b; }) };
   }).filter(function (r) { return r.games || r.duties; });
@@ -1315,9 +1315,9 @@ function renderDutyReview() {
     var pa = a.perGame === null ? Infinity : a.perGame, pb = b.perGame === null ? Infinity : b.perGame;
     return (pb - pa) || (b.duties - a.duties) || a.name.localeCompare(b.name);
   });
-  var html = '<table><tr><th>Name</th><th>Games</th><th>Duties</th><th>Credited</th><th>Duties per game</th><th>Duty rounds</th></tr>';
+  var html = '<table><tr><th>Name</th><th>Games</th><th>Duties</th><th>Duties per game</th><th>Duty rounds</th></tr>';
   rows.forEach(function (r) {
-    html += '<tr><td>' + escDutyHtml(r.name) + '</td><td>' + r.games + '</td><td>' + r.duties + '</td><td>' + r.credited + '</td><td>' +
+    html += '<tr><td>' + escDutyHtml(r.name) + '</td><td>' + r.games + '</td><td>' + r.duties + '</td><td>' +
       (r.perGame === null ? '-' : r.perGame.toFixed(2)) + '</td><td>' + escDutyHtml(r.rounds.join(', ')) + '</td></tr>';
   });
   html += '</table>';
