@@ -17,6 +17,7 @@ next deploy from the repo and are not recorded anywhere.
 | game-day              | `workers/game-day`         | `workers/game-day/**`                              |
 | weekly-fines          | `workers/weekly-fines`     | `workers/weekly-fines/**`, `shared/**`             |
 | club-gate             | `workers/club-gate`        | `workers/club-gate/**`                             |
+| training-days         | `workers/training-days`    | `workers/training-days/**`, `shared/**`            |
 
 Settings for every Worker:
 - Build command: none
