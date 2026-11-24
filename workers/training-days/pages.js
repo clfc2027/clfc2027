@@ -211,13 +211,13 @@ export var ADMIN_PAGE = `<!doctype html>
     </table>
     <div id="sessionDetail"></div>
 
-    <h2>Weekly rewards</h2>
+    <h2>Attendance credit</h2>
     <div class="card">
+      <p class="muted">10% for Tuesday and Thursday, 5% for one day or a posted absence. Not accountable resets to 0. 100% counts as a chore done and resets.</p>
       <div class="row" style="margin-bottom:8px">
-        <input id="rewardWeek" type="date">
-        <button id="loadRewards" class="alt">Show week</button>
+        <button id="loadCredit" class="alt">Refresh credit</button>
       </div>
-      <div id="rewards" class="muted">Pick any date in a week.</div>
+      <div id="credit" class="muted">Set week one to start credit.</div>
     </div>
   </div>
 </main>
@@ -291,15 +291,18 @@ async function showSession(date) {
   $('sessionDetail').innerHTML = html;
 }
 
-async function showRewards(week) {
-  var d = await api('/api/admin/rewards?week=' + encodeURIComponent(week));
-  var head = d.enabled ? '' : '<p class="muted">Rewards are not on for this week yet (set week one).</p>';
+async function showCredit() {
+  var d = await api('/api/admin/credit');
+  if (!d.enabled) { $('credit').innerHTML = '<p class="muted">Credit is off. Set week one to start.</p>'; return; }
   var rows = d.rows.map(function (r) {
-    return '<tr><td>' + esc(r.name) + '</td><td>' + r.percent + '%</td><td>' + esc(r.reason) + '</td></tr>';
+    var last = r.last_week
+      ? (r.last_week.accountable ? (r.last_week.pct + '%') : 'not accountable')
+      : '-';
+    return '<tr><td>' + esc(r.name) + '</td><td class="r">' + r.credit + '%</td><td class="r">' + r.credited_chores + '</td><td>' + esc(r.last_credited_week || '-') + '</td><td>' + esc(last) + '</td></tr>';
   }).join('');
-  $('rewards').innerHTML = head + (rows
-    ? '<table><thead><tr><th>Name</th><th>Reduction</th><th>Reason</th></tr></thead><tbody>' + rows + '</tbody></table>'
-    : '<p class="muted">Nobody qualifies for this week.</p>');
+  $('credit').innerHTML = rows
+    ? '<table><thead><tr><th>Name</th><th class="r">Credit</th><th class="r">Credited chores</th><th>Last credited week</th><th>Last completed week</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    : '<p class="muted">Nobody has credit yet.</p>';
 }
 
 $('loginForm').addEventListener('submit', async function (e) {
@@ -331,9 +334,9 @@ $('runCount').addEventListener('click', async function () {
   } catch (err) { say(err.message, 'bad'); }
 });
 
-$('loadRewards').addEventListener('click', async function () {
+$('loadCredit').addEventListener('click', async function () {
   try {
-    await showRewards($('rewardWeek').value);
+    await showCredit();
   } catch (err) { say(err.message, 'bad'); }
 });
 
