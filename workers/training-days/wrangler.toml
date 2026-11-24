@@ -1,0 +1,23 @@
+# training-days (Tuesday and Thursday check-in, streaks, wheel), code as deployed from the repo.
+name = "training-days"
+main = "worker.js"
+compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
+
+# Member PIN check only (member_directory). Nothing is written here.
+[[d1_databases]]
+binding = "DB"
+database_name = "playhq-warriors" # TODO: confirm in Settings > Bindings
+database_id = "d0e2a120-9971-4341-9960-9a6fa2d636be"
+
+# All training tables live in FLEXI (sessions, check-ins, absences, wheel, PIN attempts).
+# Tables are created on the first request.
+[[d1_databases]]
+binding = "FLEXI"
+database_name = "clfc2026-flexi"
+database_id = "59096bce-7645-4f7b-a757-04290b67b063"
+
+# Thursday 5:45pm Perth (UTC+8) = 09:45 UTC on Thursday. Runs the count.
+[triggers]
+crons = ["45 9 * * 4"]
+
+# Secrets (dashboard, not in this file): ADMIN_PASSCODE
