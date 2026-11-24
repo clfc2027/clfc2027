@@ -1,5 +1,4 @@
 import { passcodeState } from "../../shared/auth.js";
-import { loadAttendanceCredit } from "../../shared/training-credit.js";
 import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE } from "./pages.js";
 
 // Training check-in Worker (Tuesday and Thursday sessions, Perth time).
@@ -335,7 +334,10 @@ async function computeAttendance(env, now) {
 
 function publicView(att) {
   return {
-    members: att.members.map(function (m) { return { name: m.name, sessions: m.sessions, tier: m.tier }; }),
+    // Wall only shows people on 5 or more in a row.
+    members: att.members.filter(function (m) { return m.tier; }).map(function (m) {
+      return { name: m.name, sessions: m.sessions, tier: m.tier };
+    }),
     wheel: att.wheel
   };
 }
@@ -422,27 +424,6 @@ async function spinRound(env, round, now) {
   return { winner_member_id: winner, winner: names.get(winner) || "Unknown" };
 }
 
-// ---------- attendance credit (rule lives in shared/training-credit.js) ----------
-
-async function creditView(env, now) {
-  var credit = await loadAttendanceCredit(env.FLEXI, now);
-  var names = await memberNames(env);
-  var settings = await getSettings(env);
-  var rows = [];
-  credit.forEach(function (state, id) {
-    var last = state.weeks.length ? state.weeks[state.weeks.length - 1] : null;
-    rows.push({
-      name: names.get(id) || "Unknown",
-      credit: state.credit,
-      credited_chores: state.creditedWeeks.length,
-      last_credited_week: state.lastCreditedWeek,
-      last_week: last ? { week: last.week, pct: last.pct, accountable: last.accountable } : null
-    });
-  });
-  rows.sort(function (a, b) { return a.name.localeCompare(b.name); });
-  return { enabled: !!settings.week_one, week_one: settings.week_one || null, rows: rows };
-}
-
 // ---------- admin ----------
 
 function httpError(message, status) {
@@ -520,10 +501,6 @@ async function handleAdmin(request, env, url, now) {
     var sb = await request.json().catch(function () { return {}; });
     if (!Number.isInteger(sb.round)) return json({ error: "Bad round" }, 400);
     return json({ ok: true, result: await spinRound(env, sb.round, now) });
-  }
-
-  if (method === "GET" && path === "/api/admin/credit") {
-    return json(await creditView(env, now));
   }
 
   return json({ error: "Not found" }, 404);

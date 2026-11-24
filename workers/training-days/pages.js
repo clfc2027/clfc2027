@@ -105,8 +105,15 @@ export var WALL_PAGE = `<!doctype html>
 <style>${BASE_CSS}${TIER_CSS}${WHEEL_CSS}</style></head>
 <body><main>
   <h1>Training attendance</h1>
-  <p class="muted">Sessions attended. Consecutive runs light up: 5 red, 10 blue, 15 white, 20 gold.</p>
   <div class="card"><ul id="list"><li class="empty">Loading...</li></ul></div>
+  <div class="card key">
+    <ul>
+      <li class="m t-red"><span class="n">5 Sessions Straight</span></li>
+      <li class="m t-blue"><span class="n">10 Sessions Straight</span></li>
+      <li class="m t-white"><span class="n">15 Sessions Straight</span></li>
+      <li class="m t-gold"><span class="n">20 Sessions Straight</span></li>
+    </ul>
+  </div>
   <h2>The wheel</h2>
   <div class="card" id="wheel"></div>
 </main>
@@ -211,14 +218,7 @@ export var ADMIN_PAGE = `<!doctype html>
     </table>
     <div id="sessionDetail"></div>
 
-    <h2>Attendance credit</h2>
-    <div class="card">
-      <p class="muted">10% for Tuesday and Thursday, 5% for one day or a posted absence. Not accountable resets to 0. 100% counts as a chore done and resets.</p>
-      <div class="row" style="margin-bottom:8px">
-        <button id="loadCredit" class="alt">Refresh credit</button>
-      </div>
-      <div id="credit" class="muted">Set week one to start credit.</div>
-    </div>
+
   </div>
 </main>
 <script>
@@ -291,20 +291,6 @@ async function showSession(date) {
   $('sessionDetail').innerHTML = html;
 }
 
-async function showCredit() {
-  var d = await api('/api/admin/credit');
-  if (!d.enabled) { $('credit').innerHTML = '<p class="muted">Credit is off. Set week one to start.</p>'; return; }
-  var rows = d.rows.map(function (r) {
-    var last = r.last_week
-      ? (r.last_week.accountable ? (r.last_week.pct + '%') : 'not accountable')
-      : '-';
-    return '<tr><td>' + esc(r.name) + '</td><td class="r">' + r.credit + '%</td><td class="r">' + r.credited_chores + '</td><td>' + esc(r.last_credited_week || '-') + '</td><td>' + esc(last) + '</td></tr>';
-  }).join('');
-  $('credit').innerHTML = rows
-    ? '<table><thead><tr><th>Name</th><th class="r">Credit</th><th class="r">Credited chores</th><th>Last credited week</th><th>Last completed week</th></tr></thead><tbody>' + rows + '</tbody></table>'
-    : '<p class="muted">Nobody has credit yet.</p>';
-}
-
 $('loginForm').addEventListener('submit', async function (e) {
   e.preventDefault();
   pass = $('passcode').value;
@@ -334,11 +320,6 @@ $('runCount').addEventListener('click', async function () {
   } catch (err) { say(err.message, 'bad'); }
 });
 
-$('loadCredit').addEventListener('click', async function () {
-  try {
-    await showCredit();
-  } catch (err) { say(err.message, 'bad'); }
-});
 
 document.addEventListener('click', async function (e) {
   var t = e.target;
