@@ -1,10 +1,12 @@
-import { passcodeState } from "../../shared/auth.js";
-import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE } from "./pages.js";
+import { passcodeState, constantTimeEqual } from "../../shared/auth.js";
+import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE, NO_QR_PAGE } from "./pages.js";
 
 // Training check-in Worker (Tuesday and Thursday sessions, Perth time).
 // Bindings: DB -> playhq-warriors (member_directory, PIN check only)
 //           FLEXI -> clfc2026-flexi (all training_* tables)
-// Secret: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
+// Secrets: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
+//          QR_TOKEN (the token printed in the training QR, ?t=...). Scan page and check-in fail closed without it.
+// Attendance credit is computed in shared/training-credit.js, so the duty randomiser reads the same rule.
 // Cron: "45 9 * * 4" UTC = Thursday 5:45pm Perth. Runs the count.
 
 var TZ_OFFSET_MS = 8 * 3600 * 1000; // Perth, UTC+8, no daylight saving
@@ -174,14 +176,23 @@ async function logPinAttempt(env, ip, ok, now) {
     .bind(new Date(now.getTime() - PIN_LOCK_MS).toISOString()).run();
 }
 
-async function readPin(request) {
-  var body = await request.json().catch(function () { return {}; });
-  return String(body.pin || "").trim();
+// The scan page and check-in only work for someone who scanned the QR (carries the QR token).
+function qrTokenOk(token, env) {
+  if (!env.QR_TOKEN) return false;
+  return constantTimeEqual(String(token || ""), env.QR_TOKEN);
+}
+
+async function readBody(request) {
+  return request.json().catch(function () { return {}; });
 }
 
 // ---------- scan and absence ----------
 
 async function handleScan(request, env, now) {
+  var body = await readBody(request);
+  if (!qrTokenOk(body.t, env)) {
+    return json({ status: "no_qr", message: "Scan the training QR code to check in." }, 403);
+  }
   var ip = clientIp(request);
   if (await pinLocked(env, ip, now)) {
     return json({ status: "locked", message: "Too many attempts. Try again in 15 minutes." }, 429);
@@ -190,8 +201,7 @@ async function handleScan(request, env, now) {
   if (!isOpen(p)) {
     return json({ status: "closed", message: "Check-in is open Tuesdays and Thursdays, 5:15pm to 7:00pm." });
   }
-  var pin = await readPin(request);
-  var member = await findMember(env, pin);
+  var member = await findMember(env, String(body.pin || "").trim());
   await logPinAttempt(env, ip, !!member, now);
   if (!member) {
     return json({ status: "bad_pin", message: "PIN not recognised." }, 401);
@@ -215,7 +225,8 @@ async function handleAbsence(request, env, now) {
   if (await pinLocked(env, ip, now)) {
     return json({ status: "locked", message: "Too many attempts. Try again in 15 minutes." }, 429);
   }
-  var pin = await readPin(request);
+  var body = await readBody(request);
+  var pin = String(body.pin || "").trim();
   var member = await findMember(env, pin);
   await logPinAttempt(env, ip, !!member, now);
   if (!member) {
@@ -333,7 +344,10 @@ async function computeAttendance(env, now) {
 
 function publicView(att) {
   return {
-    members: att.members.map(function (m) { return { name: m.name, sessions: m.sessions, tier: m.tier }; }),
+    // Wall only shows people on 5 or more in a row.
+    members: att.members.filter(function (m) { return m.tier; }).map(function (m) {
+      return { name: m.name, sessions: m.sessions, tier: m.tier };
+    }),
     wheel: att.wheel
   };
 }
@@ -420,42 +434,6 @@ async function spinRound(env, round, now) {
   return { winner_member_id: winner, winner: names.get(winner) || "Unknown" };
 }
 
-// ---------- weekly rewards (10% both days, 5% for an absence post) ----------
-
-async function rewardsFor(env, weekMonday) {
-  var settings = await getSettings(env);
-  var tue = addDays(weekMonday, 1);
-  var thu = addDays(weekMonday, 3);
-  var enabled = !!settings.week_one && weekMonday >= mondayOf(settings.week_one);
-  var thuCut = atPerth(thu, COUNT_TIME).toISOString();
-  var checks = await env.FLEXI.prepare("SELECT session_date, member_id, scanned_at FROM training_checkins WHERE session_date IN (?1, ?2)")
-    .bind(tue, thu).all();
-  var abs = await env.FLEXI.prepare("SELECT member_id FROM training_absences WHERE session_date IN (?1, ?2)")
-    .bind(tue, thu).all();
-  var seen = new Map();
-  checks.results.forEach(function (c) {
-    var e = seen.get(c.member_id) || { tue: false, thu: false };
-    seen.set(c.member_id, e);
-    if (c.session_date === tue) e.tue = true;
-    // A Thursday scan after the 5:45pm count is not counted for this week.
-    if (c.session_date === thu && c.scanned_at < thuCut) e.thu = true;
-  });
-  var absent = new Set(abs.results.map(function (a) { return a.member_id; }));
-  var names = await memberNames(env);
-  var rows = [];
-  var ids = new Set([].concat(Array.from(seen.keys()), Array.from(absent)));
-  ids.forEach(function (id) {
-    var e = seen.get(id) || { tue: false, thu: false };
-    if (e.tue && e.thu) {
-      rows.push({ name: names.get(id) || "Unknown", percent: 10, reason: "Tuesday and Thursday" });
-    } else if (absent.has(id)) {
-      rows.push({ name: names.get(id) || "Unknown", percent: 5, reason: "Absence posted" });
-    }
-  });
-  rows.sort(function (a, b) { return a.name.localeCompare(b.name); });
-  return { week: weekMonday, enabled: enabled, rows: rows };
-}
-
 // ---------- admin ----------
 
 function httpError(message, status) {
@@ -535,12 +513,6 @@ async function handleAdmin(request, env, url, now) {
     return json({ ok: true, result: await spinRound(env, sb.round, now) });
   }
 
-  if (method === "GET" && path === "/api/admin/rewards") {
-    var week = url.searchParams.get("week") || perthParts(now).ymd;
-    if (!validYmd(week)) return json({ error: "Bad week" }, 400);
-    return json(await rewardsFor(env, mondayOf(week)));
-  }
-
   return json({ error: "Not found" }, 404);
 }
 
@@ -555,7 +527,10 @@ export default {
       var method = request.method;
       var now = new Date();
 
-      if (method === "GET" && (path === "/" || path === "/scan")) return page(SCAN_PAGE);
+      if (method === "GET" && (path === "/" || path === "/scan")) {
+        if (!qrTokenOk(url.searchParams.get("t"), env)) return page(NO_QR_PAGE);
+        return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
+      }
       if (method === "GET" && path === "/attendance") return page(WALL_PAGE);
       if (method === "GET" && path === "/admin") return page(ADMIN_PAGE);
       if (method === "GET" && path === "/api/attendance") return json(publicView(await computeAttendance(env, now)));

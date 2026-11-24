@@ -68,6 +68,7 @@ export var SCAN_PAGE = `<!doctype html>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
 </main>
 <script>
+var QR_TOKEN = '__QR_TOKEN__';
 document.getElementById('f').addEventListener('submit', async function (e) {
   e.preventDefault();
   var pin = document.getElementById('pin').value.trim();
@@ -75,7 +76,7 @@ document.getElementById('f').addEventListener('submit', async function (e) {
   out.className = 'note big';
   out.textContent = 'Checking...';
   try {
-    var r = await fetch('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
+    var r = await fetch('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin, t: QR_TOKEN }) });
     var d = await r.json();
     if (d.name) {
       out.innerHTML = '';
@@ -99,14 +100,33 @@ document.getElementById('f').addEventListener('submit', async function (e) {
 </script>
 </body></html>`;
 
+export var NO_QR_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Training check-in</title>
+<style>${BASE_CSS}</style></head>
+<body><main>
+  <h1>Training check-in</h1>
+  <div class="card">
+    <p class="big">Scan the training QR code to check in.</p>
+    <p class="muted">Check-in only works from the QR code at training.</p>
+  </div>
+</main></body></html>`;
+
 export var WALL_PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Training attendance</title>
 <style>${BASE_CSS}${TIER_CSS}${WHEEL_CSS}</style></head>
 <body><main>
   <h1>Training attendance</h1>
-  <p class="muted">Sessions attended. Consecutive runs light up: 5 red, 10 blue, 15 white, 20 gold.</p>
   <div class="card"><ul id="list"><li class="empty">Loading...</li></ul></div>
+  <div class="card key">
+    <ul>
+      <li class="m t-red"><span class="n">5 Sessions Straight</span></li>
+      <li class="m t-blue"><span class="n">10 Sessions Straight</span></li>
+      <li class="m t-white"><span class="n">15 Sessions Straight</span></li>
+      <li class="m t-gold"><span class="n">20 Sessions Straight</span></li>
+    </ul>
+  </div>
   <h2>The wheel</h2>
   <div class="card" id="wheel"></div>
 </main>
@@ -211,14 +231,7 @@ export var ADMIN_PAGE = `<!doctype html>
     </table>
     <div id="sessionDetail"></div>
 
-    <h2>Weekly rewards</h2>
-    <div class="card">
-      <div class="row" style="margin-bottom:8px">
-        <input id="rewardWeek" type="date">
-        <button id="loadRewards" class="alt">Show week</button>
-      </div>
-      <div id="rewards" class="muted">Pick any date in a week.</div>
-    </div>
+
   </div>
 </main>
 <script>
@@ -291,17 +304,6 @@ async function showSession(date) {
   $('sessionDetail').innerHTML = html;
 }
 
-async function showRewards(week) {
-  var d = await api('/api/admin/rewards?week=' + encodeURIComponent(week));
-  var head = d.enabled ? '' : '<p class="muted">Rewards are not on for this week yet (set week one).</p>';
-  var rows = d.rows.map(function (r) {
-    return '<tr><td>' + esc(r.name) + '</td><td>' + r.percent + '%</td><td>' + esc(r.reason) + '</td></tr>';
-  }).join('');
-  $('rewards').innerHTML = head + (rows
-    ? '<table><thead><tr><th>Name</th><th>Reduction</th><th>Reason</th></tr></thead><tbody>' + rows + '</tbody></table>'
-    : '<p class="muted">Nobody qualifies for this week.</p>');
-}
-
 $('loginForm').addEventListener('submit', async function (e) {
   e.preventDefault();
   pass = $('passcode').value;
@@ -331,11 +333,6 @@ $('runCount').addEventListener('click', async function () {
   } catch (err) { say(err.message, 'bad'); }
 });
 
-$('loadRewards').addEventListener('click', async function () {
-  try {
-    await showRewards($('rewardWeek').value);
-  } catch (err) { say(err.message, 'bad'); }
-});
 
 document.addEventListener('click', async function (e) {
   var t = e.target;
