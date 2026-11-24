@@ -94,6 +94,7 @@ h1 em, h2 span { color: var(--red); font-style: normal; }
 .feature-stack { display: contents; }
 .feature-featured .feature-icon { width: 40px; height: 40px; margin: 0; font-size: 18px; }
 .feature-compact { min-height: 0; padding: 20px; }
+.feature-wide { grid-column: 1 / -1; }
 .feature-compact .compact-row { display: grid; grid-template-columns: 45px 1fr; gap: 16px; align-items: start; margin-top: 22px; }
 .feature-compact .feature-icon { width: 40px; height: 40px; margin: 0; color: var(--blue-bright); font-size: 18px; }
 .feature-compact h3 { margin: 0 0 7px; font-size: 18px; line-height: 1.05; }
