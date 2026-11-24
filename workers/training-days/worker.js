@@ -1,10 +1,12 @@
 import { passcodeState } from "../../shared/auth.js";
+import { loadAttendanceCredit } from "../../shared/training-credit.js";
 import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE } from "./pages.js";
 
 // Training check-in Worker (Tuesday and Thursday sessions, Perth time).
 // Bindings: DB -> playhq-warriors (member_directory, PIN check only)
 //           FLEXI -> clfc2026-flexi (all training_* tables)
 // Secret: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
+// Attendance credit is computed in shared/training-credit.js, so the duty randomiser reads the same rule.
 // Cron: "45 9 * * 4" UTC = Thursday 5:45pm Perth. Runs the count.
 
 var TZ_OFFSET_MS = 8 * 3600 * 1000; // Perth, UTC+8, no daylight saving
@@ -420,40 +422,25 @@ async function spinRound(env, round, now) {
   return { winner_member_id: winner, winner: names.get(winner) || "Unknown" };
 }
 
-// ---------- weekly rewards (10% both days, 5% for an absence post) ----------
+// ---------- attendance credit (rule lives in shared/training-credit.js) ----------
 
-async function rewardsFor(env, weekMonday) {
-  var settings = await getSettings(env);
-  var tue = addDays(weekMonday, 1);
-  var thu = addDays(weekMonday, 3);
-  var enabled = !!settings.week_one && weekMonday >= mondayOf(settings.week_one);
-  var thuCut = atPerth(thu, COUNT_TIME).toISOString();
-  var checks = await env.FLEXI.prepare("SELECT session_date, member_id, scanned_at FROM training_checkins WHERE session_date IN (?1, ?2)")
-    .bind(tue, thu).all();
-  var abs = await env.FLEXI.prepare("SELECT member_id FROM training_absences WHERE session_date IN (?1, ?2)")
-    .bind(tue, thu).all();
-  var seen = new Map();
-  checks.results.forEach(function (c) {
-    var e = seen.get(c.member_id) || { tue: false, thu: false };
-    seen.set(c.member_id, e);
-    if (c.session_date === tue) e.tue = true;
-    // A Thursday scan after the 5:45pm count is not counted for this week.
-    if (c.session_date === thu && c.scanned_at < thuCut) e.thu = true;
-  });
-  var absent = new Set(abs.results.map(function (a) { return a.member_id; }));
+async function creditView(env, now) {
+  var credit = await loadAttendanceCredit(env.FLEXI, now);
   var names = await memberNames(env);
+  var settings = await getSettings(env);
   var rows = [];
-  var ids = new Set([].concat(Array.from(seen.keys()), Array.from(absent)));
-  ids.forEach(function (id) {
-    var e = seen.get(id) || { tue: false, thu: false };
-    if (e.tue && e.thu) {
-      rows.push({ name: names.get(id) || "Unknown", percent: 10, reason: "Tuesday and Thursday" });
-    } else if (absent.has(id)) {
-      rows.push({ name: names.get(id) || "Unknown", percent: 5, reason: "Absence posted" });
-    }
+  credit.forEach(function (state, id) {
+    var last = state.weeks.length ? state.weeks[state.weeks.length - 1] : null;
+    rows.push({
+      name: names.get(id) || "Unknown",
+      credit: state.credit,
+      credited_chores: state.creditedWeeks.length,
+      last_credited_week: state.lastCreditedWeek,
+      last_week: last ? { week: last.week, pct: last.pct, accountable: last.accountable } : null
+    });
   });
   rows.sort(function (a, b) { return a.name.localeCompare(b.name); });
-  return { week: weekMonday, enabled: enabled, rows: rows };
+  return { enabled: !!settings.week_one, week_one: settings.week_one || null, rows: rows };
 }
 
 // ---------- admin ----------
@@ -535,10 +522,8 @@ async function handleAdmin(request, env, url, now) {
     return json({ ok: true, result: await spinRound(env, sb.round, now) });
   }
 
-  if (method === "GET" && path === "/api/admin/rewards") {
-    var week = url.searchParams.get("week") || perthParts(now).ymd;
-    if (!validYmd(week)) return json({ error: "Bad week" }, 400);
-    return json(await rewardsFor(env, mondayOf(week)));
+  if (method === "GET" && path === "/api/admin/credit") {
+    return json(await creditView(env, now));
   }
 
   return json({ error: "Not found" }, 404);
