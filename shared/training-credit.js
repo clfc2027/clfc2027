@@ -123,3 +123,29 @@ export async function loadAttendanceCredit(db, asOf) {
     absences: absences.results
   });
 }
+
+// Week-to-round mapping. Week one is the week of round 1, so the week at index i (0 = week one)
+// holds round i + 1. A chore credited in that week only counts from the next round on, because
+// the credit is finished at the end of the week. So it applies from round i + 2.
+// Returns Map member_id -> [applyRound, ...] (rounds as numbers).
+export function creditedChoreRounds(credit, weekOne) {
+  var out = new Map();
+  if (!weekOne || !credit) return out;
+  var firstMonday = Date.parse(mondayOf(weekOne) + "T00:00:00Z");
+  credit.forEach(function (state, memberId) {
+    var rounds = state.creditedWeeks.map(function (monday) {
+      var index = Math.round((Date.parse(monday + "T00:00:00Z") - firstMonday) / (7 * 86400000));
+      return index + 2;
+    });
+    if (rounds.length) out.set(memberId, rounds);
+  });
+  return out;
+}
+
+// Loads the credited chores by round for the duty randomiser. db is the FLEXI binding.
+export async function loadCreditedRounds(db, asOf) {
+  var setting = await db.prepare("SELECT value FROM training_settings WHERE key = 'week_one'").first();
+  var weekOne = setting && setting.value ? setting.value : null;
+  var credit = await loadAttendanceCredit(db, asOf);
+  return creditedChoreRounds(credit, weekOne);
+}

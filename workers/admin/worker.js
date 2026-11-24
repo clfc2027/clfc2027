@@ -1,5 +1,6 @@
 // CLFC PlayHQ Admin worker — passcode protected
 import { passcodeState } from "../../shared/auth.js";
+import { loadCreditedRounds } from "../../shared/training-credit.js";
 // The passcode is NOT stored in this file. It is read from the ADMIN_PASSCODE secret.
 // Set it with:  npx.cmd wrangler secret put ADMIN_PASSCODE --name admin
 
@@ -759,6 +760,9 @@ async function getGameDayTally(flexi, season) {
   } catch (e) {
     if (!/no such table/i.test(e.message)) throw e;
   }
+  // Attendance credit: each credited chore counts as a duty from the round it applies to (see shared/training-credit.js).
+  const creditRounds = await loadCreditedRounds(flexi, new Date());
+  for (const m of byMember.values()) m.credited_rounds = creditRounds.get(m.member_id) || [];
   const members = [...byMember.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   return { season, tasks: DUTY_TASKS.map((t) => ({ key: t.key, label: t.label })), members };
 }
@@ -1245,7 +1249,8 @@ async function loadDutyTally() {
   data.members.forEach(function (m) {
     dutyCounts[String(m.member_id)] = {
       name: m.name, total: m.total, by_task: m.by_task || {},
-      duty_rounds: m.duty_rounds || {}, games_rounds: m.games_rounds || []
+      duty_rounds: m.duty_rounds || {}, games_rounds: m.games_rounds || [],
+      credited_rounds: m.credited_rounds || []
     };
   });
   applyDutyHighlights();
@@ -1256,12 +1261,17 @@ async function loadDutyTally() {
 // rounds, the last earlier duty round, and whether the person has a duty in the week before or after.
 function dutyStatsBefore(key, round) {
   var cur = parseInt(round, 10);
-  var c = dutyCounts[key] || { duty_rounds: {}, games_rounds: [] };
-  var out = { duties: 0, games: 0, lastDuty: 0, neighbour: false };
+  var c = dutyCounts[key] || { duty_rounds: {}, games_rounds: [], credited_rounds: [] };
+  var out = { duties: 0, games: 0, lastDuty: 0, neighbour: false, credited: 0 };
   Object.keys(c.duty_rounds).forEach(function (k) {
     var n = parseInt(k, 10);
     if (n < cur) { out.duties += c.duty_rounds[k]; if (n > out.lastDuty) out.lastDuty = n; }
     if (n === cur - 1 || n === cur + 1) out.neighbour = true;
+  });
+  // Attendance credit: a credited chore is treated as a duty done, from the round it applies to.
+  // It does not make someone a back-to-back player, so neighbour is not set by it.
+  (c.credited_rounds || []).forEach(function (r) {
+    if (r <= cur) { out.duties += 1; out.credited += 1; if (r - 1 > out.lastDuty) out.lastDuty = r - 1; }
   });
   out.games = c.games_rounds.filter(function (k) { return parseInt(k, 10) < cur; }).length;
   return out;
@@ -1297,7 +1307,7 @@ function renderDutyReview() {
     var c = dutyCounts[key];
     var games = c.games_rounds.length;
     var duties = c.total;
-    return { name: c.name || key, games: games, duties: duties,
+    return { name: c.name || key, games: games, duties: duties, credited: (c.credited_rounds || []).length,
       perGame: games ? duties / games : null,
       rounds: Object.keys(c.duty_rounds).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return a - b; }) };
   }).filter(function (r) { return r.games || r.duties; });
@@ -1305,9 +1315,9 @@ function renderDutyReview() {
     var pa = a.perGame === null ? Infinity : a.perGame, pb = b.perGame === null ? Infinity : b.perGame;
     return (pb - pa) || (b.duties - a.duties) || a.name.localeCompare(b.name);
   });
-  var html = '<table><tr><th>Name</th><th>Games</th><th>Duties</th><th>Duties per game</th><th>Duty rounds</th></tr>';
+  var html = '<table><tr><th>Name</th><th>Games</th><th>Duties</th><th>Credited</th><th>Duties per game</th><th>Duty rounds</th></tr>';
   rows.forEach(function (r) {
-    html += '<tr><td>' + escDutyHtml(r.name) + '</td><td>' + r.games + '</td><td>' + r.duties + '</td><td>' +
+    html += '<tr><td>' + escDutyHtml(r.name) + '</td><td>' + r.games + '</td><td>' + r.duties + '</td><td>' + r.credited + '</td><td>' +
       (r.perGame === null ? '-' : r.perGame.toFixed(2)) + '</td><td>' + escDutyHtml(r.rounds.join(', ')) + '</td></tr>';
   });
   html += '</table>';
@@ -1431,7 +1441,7 @@ function randomiseDuties() {
     if (none.length) msg.push('No eligible players on the boards for: ' + none.join(', '));
     showStatus('duties', msg.join('. ') + '. Review these spots, then press Save duties.', 'error');
   } else {
-    showStatus('duties', 'Randomised Round ' + dutyRound + ' (no back-to-back weeks, lowest duties per game first). Review, then press Save duties.', 'success');
+    showStatus('duties', 'Randomised Round ' + dutyRound + ' (no back-to-back weeks, lowest duties per game first, attendance credit counted as duties). Review, then press Save duties.', 'success');
   }
 }
 
