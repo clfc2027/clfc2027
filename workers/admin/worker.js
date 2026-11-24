@@ -956,7 +956,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 <div class="duty-venue-row"><label for="dutyVenue">Round type</label><select id="dutyVenue"><option value="">Choose home or away</option><option value="home">Home game</option><option value="away">Away game</option></select></div>
 <div class="duty-title" id="dutyTitle">CLFC GAME DAY DUTIES</div>
 <div class="duty-grid" id="dutyGrid"></div>
-<div class="duty-review-head"><h4>Duties vs games played</h4><p class="duty-legend">Games = rounds the person was named on a coaches board team. Duties = all game day duties allocated this season. Highest duties per game first.</p><div class="duty-tally" id="dutyReview"></div></div>
+<details class="duty-review-head">
+<summary><strong>Duties vs games played</strong> (click to show or hide)</summary>
+<p class="duty-legend">Games = rounds the person was named on a coaches board team. Duties = all game day duties allocated this season. Highest duties per game first.</p>
+<div class="duty-tally" id="dutyReview"></div>
+</details>
 <div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutyRandomBtn">🎲 Randomise</button><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
 <div class="status" id="status-duties"></div>
 </div>
