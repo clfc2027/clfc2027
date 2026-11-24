@@ -531,6 +531,11 @@ export default {
         if (!qrTokenOk(url.searchParams.get("t"), env)) return page(NO_QR_PAGE);
         return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
       }
+      if (method === "GET" && path === "/rego.jpg") {
+        var img = await env.REGO.get("Screenshot_20261125_071551_Picsart.jpg");
+        if (!img) return new Response("Not found", { status: 404 });
+        return new Response(img.body, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=3600" } });
+      }
       if (method === "GET" && path === "/attendance") return page(WALL_PAGE);
       if (method === "GET" && path === "/admin") return page(ADMIN_PAGE);
       if (method === "GET" && path === "/api/attendance") return json(publicView(await computeAttendance(env, now)));

@@ -66,6 +66,7 @@ export var SCAN_PAGE = `<!doctype html>
     <p id="out" class="note big" aria-live="polite"></p>
   </div>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
+  <img src="/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
 </main>
 <script>
 var QR_TOKEN = '__QR_TOKEN__';

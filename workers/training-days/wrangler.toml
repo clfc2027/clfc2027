@@ -16,6 +16,11 @@ binding = "FLEXI"
 database_name = "clfc2026-flexi"
 database_id = "59096bce-7645-4f7b-a757-04290b67b063"
 
+# Club image shown under the PIN form on the scan page (served at /rego.jpg).
+[[r2_buckets]]
+binding = "REGO"
+bucket_name = "rego"
+
 # Thursday 5:45pm Perth (UTC+8) = 09:45 UTC on Thursday. Runs the count.
 [triggers]
 crons = ["45 9 * * 4"]
