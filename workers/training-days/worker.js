@@ -1,10 +1,11 @@
-import { passcodeState } from "../../shared/auth.js";
-import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE } from "./pages.js";
+import { passcodeState, constantTimeEqual } from "../../shared/auth.js";
+import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE, NO_QR_PAGE } from "./pages.js";
 
 // Training check-in Worker (Tuesday and Thursday sessions, Perth time).
 // Bindings: DB -> playhq-warriors (member_directory, PIN check only)
 //           FLEXI -> clfc2026-flexi (all training_* tables)
-// Secret: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
+// Secrets: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
+//          QR_TOKEN (the token printed in the training QR, ?t=...). Scan page and check-in fail closed without it.
 // Attendance credit is computed in shared/training-credit.js, so the duty randomiser reads the same rule.
 // Cron: "45 9 * * 4" UTC = Thursday 5:45pm Perth. Runs the count.
 
@@ -175,14 +176,23 @@ async function logPinAttempt(env, ip, ok, now) {
     .bind(new Date(now.getTime() - PIN_LOCK_MS).toISOString()).run();
 }
 
-async function readPin(request) {
-  var body = await request.json().catch(function () { return {}; });
-  return String(body.pin || "").trim();
+// The scan page and check-in only work for someone who scanned the QR (carries the QR token).
+function qrTokenOk(token, env) {
+  if (!env.QR_TOKEN) return false;
+  return constantTimeEqual(String(token || ""), env.QR_TOKEN);
+}
+
+async function readBody(request) {
+  return request.json().catch(function () { return {}; });
 }
 
 // ---------- scan and absence ----------
 
 async function handleScan(request, env, now) {
+  var body = await readBody(request);
+  if (!qrTokenOk(body.t, env)) {
+    return json({ status: "no_qr", message: "Scan the training QR code to check in." }, 403);
+  }
   var ip = clientIp(request);
   if (await pinLocked(env, ip, now)) {
     return json({ status: "locked", message: "Too many attempts. Try again in 15 minutes." }, 429);
@@ -191,8 +201,7 @@ async function handleScan(request, env, now) {
   if (!isOpen(p)) {
     return json({ status: "closed", message: "Check-in is open Tuesdays and Thursdays, 5:15pm to 7:00pm." });
   }
-  var pin = await readPin(request);
-  var member = await findMember(env, pin);
+  var member = await findMember(env, String(body.pin || "").trim());
   await logPinAttempt(env, ip, !!member, now);
   if (!member) {
     return json({ status: "bad_pin", message: "PIN not recognised." }, 401);
@@ -216,7 +225,8 @@ async function handleAbsence(request, env, now) {
   if (await pinLocked(env, ip, now)) {
     return json({ status: "locked", message: "Too many attempts. Try again in 15 minutes." }, 429);
   }
-  var pin = await readPin(request);
+  var body = await readBody(request);
+  var pin = String(body.pin || "").trim();
   var member = await findMember(env, pin);
   await logPinAttempt(env, ip, !!member, now);
   if (!member) {
@@ -517,7 +527,10 @@ export default {
       var method = request.method;
       var now = new Date();
 
-      if (method === "GET" && (path === "/" || path === "/scan")) return page(SCAN_PAGE);
+      if (method === "GET" && (path === "/" || path === "/scan")) {
+        if (!qrTokenOk(url.searchParams.get("t"), env)) return page(NO_QR_PAGE);
+        return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
+      }
       if (method === "GET" && path === "/attendance") return page(WALL_PAGE);
       if (method === "GET" && path === "/admin") return page(ADMIN_PAGE);
       if (method === "GET" && path === "/api/attendance") return json(publicView(await computeAttendance(env, now)));
