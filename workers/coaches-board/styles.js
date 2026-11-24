@@ -175,7 +175,7 @@ body.presenting .compare-bar { display: none; }
 .slot-card.cmp { cursor: default; }
 .slot-card.cmp:hover { transform: none; }
 .slot-card.cmp.match .jumper { box-shadow: inset 0 0 0 2px #ffd34d; }
-.slot-card.cmp.match .pname::after { content: " \\\\2605"; color: #ffd34d; }
+.slot-card.cmp.match .pname::after { content: " \\2605"; color: #ffd34d; }
 .cmp-side h3 { font-size: 12px; letter-spacing: .1em; margin: 0 0 8px; color: var(--silver); }
 .cmp-side .ic-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin-bottom: 6px; background: rgba(255,255,255,.05); font-size: 12px; }
 .cmp-side .ic-row .jn { font: 900 13px "Oswald", sans-serif; min-width: 30px; }
