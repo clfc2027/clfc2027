@@ -723,17 +723,41 @@ async function getGameDayTally(flexi, season) {
   await ensureDutiesTable(flexi);
   const { results } = await flexi
     .prepare(
-      `SELECT member_id, MAX(player_name) AS player_name, task_key, COUNT(*) AS n
-         FROM game_day_allocations WHERE season_year = ?1 GROUP BY member_id, task_key`
+      `SELECT member_id, MAX(player_name) AS player_name, task_key, round_name, COUNT(*) AS n
+         FROM game_day_allocations WHERE season_year = ?1 GROUP BY member_id, task_key, round_name`
     )
     .bind(season)
     .all();
   const byMember = new Map();
+  function memberOf(id, name) {
+    if (!byMember.has(id)) {
+      byMember.set(id, { member_id: id, name: name || "", total: 0, by_task: {}, duty_rounds: {}, games_rounds: [] });
+    }
+    const m = byMember.get(id);
+    if (!m.name && name) m.name = name;
+    return m;
+  }
   for (const r of results) {
-    const m = byMember.get(r.member_id) || { member_id: r.member_id, name: r.player_name, total: 0, by_task: {} };
-    m.by_task[r.task_key] = r.n;
+    const m = memberOf(r.member_id, r.player_name);
+    m.by_task[r.task_key] = (m.by_task[r.task_key] || 0) + r.n;
+    m.duty_rounds[r.round_name] = (m.duty_rounds[r.round_name] || 0) + r.n;
     m.total += r.n;
-    byMember.set(r.member_id, m);
+  }
+  // Board rounds each person was named in (games played), from the coaches board team tables.
+  try {
+    const { results: games } = await flexi
+      .prepare(
+        `SELECT DISTINCT p.member_id, MAX(p.player_name) AS player_name, s.round_name
+           FROM board_selection_players p JOIN board_selections s ON s.id = p.selection_id
+          WHERE p.member_id IS NOT NULL GROUP BY p.member_id, s.round_name`
+      )
+      .all();
+    for (const g of games) {
+      const m = memberOf(g.member_id, g.player_name);
+      m.games_rounds.push(String(g.round_name));
+    }
+  } catch (e) {
+    if (!/no such table/i.test(e.message)) throw e;
   }
   const members = [...byMember.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   return { season, tasks: DUTY_TASKS.map((t) => ({ key: t.key, label: t.label })), members };
@@ -932,6 +956,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 <div class="duty-venue-row"><label for="dutyVenue">Round type</label><select id="dutyVenue"><option value="">Choose home or away</option><option value="home">Home game</option><option value="away">Away game</option></select></div>
 <div class="duty-title" id="dutyTitle">CLFC GAME DAY DUTIES</div>
 <div class="duty-grid" id="dutyGrid"></div>
+<div class="duty-review-head"><h4>Duties vs games played</h4><p class="duty-legend">Games = rounds the person was named on a coaches board team. Duties = all game day duties allocated this season. Highest duties per game first.</p><div class="duty-tally" id="dutyReview"></div></div>
 <div class="duty-actions"><span class="duty-note" id="dutyNote"></span><span class="duty-hint" id="dutyVenueHint"></span><button type="button" id="dutyRandomBtn">🎲 Randomise</button><button type="button" id="dutySaveBtn" disabled>💾 Save duties</button></div>
 <div class="status" id="status-duties"></div>
 </div>
@@ -1214,25 +1239,34 @@ async function loadDutyTally() {
   if (!res.ok) return;
   dutyCounts = {};
   data.members.forEach(function (m) {
-    dutyCounts[String(m.member_id)] = { total: m.total, by_task: m.by_task || {} };
+    dutyCounts[String(m.member_id)] = {
+      name: m.name, total: m.total, by_task: m.by_task || {},
+      duty_rounds: m.duty_rounds || {}, games_rounds: m.games_rounds || []
+    };
   });
   applyDutyHighlights();
+  renderDutyReview();
 }
 
-// Colours each name by how many duties that person has this season, counting this round's
+// Counts only what happened before the round being shown: duties and board games in earlier
+// rounds, the last earlier duty round, and whether the person has a duty in the week before or after.
+function dutyStatsBefore(key, round) {
+  var cur = parseInt(round, 10);
+  var c = dutyCounts[key] || { duty_rounds: {}, games_rounds: [] };
+  var out = { duties: 0, games: 0, lastDuty: 0, neighbour: false };
+  Object.keys(c.duty_rounds).forEach(function (k) {
+    var n = parseInt(k, 10);
+    if (n < cur) { out.duties += c.duty_rounds[k]; if (n > out.lastDuty) out.lastDuty = n; }
+    if (n === cur - 1 || n === cur + 1) out.neighbour = true;
+  });
+  out.games = c.games_rounds.filter(function (k) { return parseInt(k, 10) < cur; }).length;
+  return out;
+}
+
+// Colours each name by how many duties that person had before this round, counting this round's
 // picks in the order they appear in the grid. 2nd = green, 3rd = yellow, 4th or more = red.
 function applyDutyHighlights() {
   var inputs = document.querySelectorAll('.duty-input');
-  var savedThisRound = {};
-  if (dutyData && dutyData.grades) {
-    DUTY_GRADES.forEach(function (g) {
-      dutyData.grades[g.key].tasks.forEach(function (t) {
-        t.slots.forEach(function (c) {
-          if (c) savedThisRound[String(c.member_id)] = (savedThisRound[String(c.member_id)] || 0) + 1;
-        });
-      });
-    });
-  }
   var running = {};
   for (var i = 0; i < inputs.length; i++) {
     var inp = inputs[i];
@@ -1241,8 +1275,7 @@ function applyDutyHighlights() {
     if (inp.disabled) continue;
     var key = inp.getAttribute('data-member-id');
     if (!key) continue;
-    var season = dutyCounts[key] ? dutyCounts[key].total : 0;
-    var base = season - (savedThisRound[key] || 0);
+    var base = dutyStatsBefore(key, dutyRound).duties;
     running[key] = (running[key] || 0) + 1;
     var n = base + running[key];
     if (n >= 4) inp.classList.add('dup-4');
@@ -1250,6 +1283,35 @@ function applyDutyHighlights() {
     else if (n === 2) inp.classList.add('dup-2');
     if (n >= 2) inp.setAttribute('title', 'Duty ' + n + ' this season');
   }
+}
+
+// Admin review: duties against games played, and how often each person has been allocated.
+function renderDutyReview() {
+  var el = document.getElementById('dutyReview');
+  if (!el) return;
+  var rows = Object.keys(dutyCounts).map(function (key) {
+    var c = dutyCounts[key];
+    var games = c.games_rounds.length;
+    var duties = c.total;
+    return { name: c.name || key, games: games, duties: duties,
+      perGame: games ? duties / games : null,
+      rounds: Object.keys(c.duty_rounds).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return a - b; }) };
+  }).filter(function (r) { return r.games || r.duties; });
+  rows.sort(function (a, b) {
+    var pa = a.perGame === null ? Infinity : a.perGame, pb = b.perGame === null ? Infinity : b.perGame;
+    return (pb - pa) || (b.duties - a.duties) || a.name.localeCompare(b.name);
+  });
+  var html = '<table><tr><th>Name</th><th>Games</th><th>Duties</th><th>Duties per game</th><th>Duty rounds</th></tr>';
+  rows.forEach(function (r) {
+    html += '<tr><td>' + escDutyHtml(r.name) + '</td><td>' + r.games + '</td><td>' + r.duties + '</td><td>' +
+      (r.perGame === null ? '-' : r.perGame.toFixed(2)) + '</td><td>' + escDutyHtml(r.rounds.join(', ')) + '</td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function escDutyHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function dutyShuffle(list) {
@@ -1261,36 +1323,34 @@ function dutyShuffle(list) {
   return a;
 }
 
-// Fills every required slot from the boards that supply it, without repeating a person within a grade.
-// People with the fewest duties so far this season are picked first (ties broken at random).
-// A round that is already saved does not count its own picks against people.
-// Fills the grid only; nothing is saved until Save duties is pressed.
+// Fills every required slot from the boards that supply it, without repeating a person within a grade
+// or across grades in the same round. Rules, in order:
+// 1. Nobody who had a duty in the round before or after is picked (no back-to-back weeks).
+// 2. People with the lowest duties per game played are picked first (so a player who has played
+//    few games but already has duties waits), then fewest total duties, then at random.
+// 3. A spot that only a back-to-back player could fill is left empty and marked "double up only"
+//    for the admin to review. Nothing is saved until Save duties is pressed.
 function randomiseDuties() {
   if (!dutyRound) return showStatus('duties', 'Pick a round first', 'error');
   if (!dutyData || !dutyData.venue) return showStatus('duties', 'Choose home or away for this round first', 'error');
 
-  var base = {};
-  function baseOf(id) {
+  var stats = {};
+  function statsOf(id) {
     var key = String(id);
-    if (!base[key]) base[key] = { total: 0, by_task: {} };
-    return base[key];
+    if (!stats[key]) stats[key] = dutyStatsBefore(key, dutyRound);
+    return stats[key];
   }
-  Object.keys(dutyCounts).forEach(function (key) {
-    base[key] = { total: dutyCounts[key].total, by_task: Object.assign({}, dutyCounts[key].by_task) };
-  });
-  DUTY_GRADES.forEach(function (g) {
-    dutyData.grades[g.key].tasks.forEach(function (t) {
-      t.slots.forEach(function (card) {
-        if (!card) return;
-        var c = baseOf(card.member_id);
-        c.total -= 1;
-        c.by_task[t.key] = (c.by_task[t.key] || 0) - 1;
-      });
-    });
+  function perGame(id) { var s = statsOf(id); return s.duties / Math.max(s.games, 1); }
+
+  // Clear the grid first so previous picks for this round don't count.
+  document.querySelectorAll('.duty-input').forEach(function (inp) {
+    if (inp.disabled) return;
+    inp.value = '';
+    inp.setAttribute('data-member-id', '');
+    inp.classList.remove('duty-needs-review');
+    inp.placeholder = '';
   });
 
-  var short = [];
-  // One map for the whole round: nobody gets two duties on the same day, across all grades.
   var used = {};
   var open = [];
   DUTY_GRADES.forEach(function (g) {
@@ -1303,64 +1363,72 @@ function randomiseDuties() {
       }
     });
   });
-  function totalOf(memberId) { return baseOf(memberId).total; }
-  // Largest set of people (at most one duty each) that can fill open duties, each matched to a duty they can do.
-  function matchPeople(people) {
-    var slotMatch = open.map(function () { return null; });
-    function augment(p, seen) {
-      for (var si = 0; si < open.length; si++) {
-        if (seen[si] || !open[si].options.some(function (o) { return o.member_id === p.member_id; })) continue;
-        seen[si] = true;
-        if (!slotMatch[si] || augment(slotMatch[si], seen)) { slotMatch[si] = p; return true; }
-      }
-      return false;
-    }
-    people.forEach(function (p) { augment(p, []); });
-    var out = [];
-    open.forEach(function (s, si) { if (slotMatch[si]) out.push({ slot: s, pick: slotMatch[si] }); });
-    return out;
+
+  function assign(slot, pick) {
+    used[pick.member_id] = true;
+    slot.input.value = pick.name;
+    slot.input.setAttribute('data-member-id', String(pick.member_id));
+    slot.input.parentNode.querySelector('.duty-suggest').hidden = true;
   }
-  // Everyone gets one duty before anyone gets a second: work up from zero duties, giving each
-  // level as many duties as it can take before moving to the next. Duties are the same whatever the job.
-  var level = 0;
-  while (open.length) {
-    var eligible = {};
-    open.forEach(function (s) {
-      s.options.forEach(function (c) {
-        if (!used[c.member_id] && totalOf(c.member_id) === level) eligible[c.member_id] = c;
-      });
-    });
-    var matched = Object.keys(eligible).length ? matchPeople(dutyShuffle(Object.keys(eligible).map(function (k) { return eligible[k]; }))) : [];
-    if (!matched.length) {
-      var more = open.some(function (s) {
-        return s.options.some(function (c) { return !used[c.member_id] && totalOf(c.member_id) > level; });
-      });
-      if (!more) break;
-      level++;
-      continue;
-    }
-    matched.forEach(function (m) {
-      var pick = m.pick, s = m.slot;
-      used[pick.member_id] = true;
-      var c = baseOf(pick.member_id);
-      c.total += 1;
-      c.by_task[s.task.key] = (c.by_task[s.task.key] || 0) + 1;
-      s.input.value = pick.name;
-      s.input.setAttribute('data-member-id', String(pick.member_id));
-      s.input.parentNode.querySelector('.duty-suggest').hidden = true;
-    });
-    open = open.filter(function (s) { return !matched.some(function (m) { return m.slot === s; }); });
-  }
+
+  // Everyone eligible, best first. Each person is placed in the first open spot they can take, and
+  // an augmenting path may move an earlier pick to another spot they can also do, so the fewest
+  // spots are left empty without ever dropping a higher-ranked person.
+  var cands = {};
   open.forEach(function (s) {
-    short.push(s.g.label + ' ' + s.task.label + ' ' + (s.slot + 1));
+    s.options.forEach(function (c) {
+      if (!used[c.member_id] && !statsOf(c.member_id).neighbour) cands[c.member_id] = c;
+    });
+  });
+  var ranked = dutyShuffle(Object.keys(cands).map(function (k) { return cands[k]; }));
+  ranked.sort(function (a, b) {
+    return (perGame(a.member_id) - perGame(b.member_id)) || (statsOf(a.member_id).duties - statsOf(b.member_id).duties);
+  });
+  var slotPick = open.map(function () { return null; });
+  function place(p, seen) {
+    for (var si = 0; si < open.length; si++) {
+      if (seen[si] || !open[si].options.some(function (o) { return o.member_id === p.member_id; })) continue;
+      seen[si] = true;
+      if (!slotPick[si] || place(slotPick[si], seen)) { slotPick[si] = p; return true; }
+    }
+    return false;
+  }
+  ranked.forEach(function (p) { place(p, []); });
+  var filled = {};
+  open.forEach(function (s, si) {
+    if (slotPick[si]) { assign(s, slotPick[si]); filled[si] = true; }
+  });
+  open = open.filter(function (s, si) { return !filled[si]; });
+
+  var doubles = [], none = [];
+  open.forEach(function (s) {
+    var label = s.g.label + ' ' + s.task.label + ' ' + (s.slot + 1);
     s.input.value = '';
     s.input.setAttribute('data-member-id', '');
     s.input.parentNode.querySelector('.duty-suggest').hidden = true;
+    s.input.classList.add('duty-needs-review');
+    var onlyDouble = s.options.some(function (o) { return !used[o.member_id] && statsOf(o.member_id).neighbour; });
+    if (onlyDouble) {
+      s.input.placeholder = 'Double up only';
+      s.input.title = 'This spot can only be filled by a double up (two weeks in a row)';
+      doubles.push(label);
+    } else {
+      s.input.placeholder = 'No one available';
+      s.input.title = 'No eligible player on the boards for this spot';
+      none.push(label);
+    }
   });
+
   setDutyDirty(true);
   applyDutyHighlights();
-  if (short.length) showStatus('duties', 'Not enough players on the boards for: ' + short.join(', '), 'error');
-  else showStatus('duties', 'Randomised Round ' + dutyRound + ' (fewest duties first). Review, then press Save duties.', 'success');
+  if (doubles.length || none.length) {
+    var msg = [];
+    if (doubles.length) msg.push('This spot can only be filled by a double up (two weeks in a row): ' + doubles.join(', '));
+    if (none.length) msg.push('No eligible players on the boards for: ' + none.join(', '));
+    showStatus('duties', msg.join('. ') + '. Review these spots, then press Save duties.', 'error');
+  } else {
+    showStatus('duties', 'Randomised Round ' + dutyRound + ' (no back-to-back weeks, lowest duties per game first). Review, then press Save duties.', 'success');
+  }
 }
 
 document.getElementById('dutyRandomBtn').addEventListener('click', randomiseDuties);
