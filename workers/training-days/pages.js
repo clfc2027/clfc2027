@@ -68,8 +68,8 @@ export var SCAN_PAGE = `<!doctype html>
     <p id="out" class="note big" aria-live="polite"></p>
   </div>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
-  <p class="request-hint">Don't have a PIN yet?</p>
-  <a class="request-btn" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Request your PIN with your name</a>
+  <p class="request-hint">Request your PIN</p>
+  <a class="request-btn" href="sms:+61451612744?body=%5Binsert%20your%20name%20to%20get%20pin%5D">Request PIN</a>
   <img src="__BASE__/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
 </main>
 <script>
