@@ -19,11 +19,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put hub-icons/statistics.png --file hub-icons-upload/statistics.png --content-type image/png --remote
+          command: r2 object put hub-icons/statistics.png --file hub-icons-upload/statistics.png --content-type image/png
 
       - name: Upload weekly-fines icon
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put hub-icons/weekly-fines.png --file hub-icons-upload/weekly-fines.png --content-type image/png --remote
+          command: r2 object put hub-icons/weekly-fines.png --file hub-icons-upload/weekly-fines.png --content-type image/png
