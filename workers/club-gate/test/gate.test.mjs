@@ -63,7 +63,7 @@ test("signed-out visitors get the PIN page with the request-PIN button, on every
     assert.equal(r.status, 401);
     const html = await r.text();
     assert.match(html, /Members only/);
-    assert.match(html, /sms:\+61451612744\?body=%5Binsert%20your%20name%20to%20get%20pin%5D/);
+    assert.match(html, /sms:\+61451612744\?body=%5Binsert%20your%20name%5D/);
     assert.match(html, /Request your PIN/);
     assert.match(html, />Request PIN</);
   }
