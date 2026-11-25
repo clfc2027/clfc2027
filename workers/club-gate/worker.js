@@ -116,6 +116,7 @@ export function gatePage(message = "") {
   .msg { min-height: 1.2em; margin-top: 10px; color: #b42318; font-weight: 600; font-size: .95rem; }
   .hero { display: block; width: 100%; height: auto; border-radius: 8px; margin: -8px 0 14px; }
   .request-hint { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid #e3e6ec; text-align: center; }
+  .register-btn { display: block; box-sizing: border-box; width: 100%; margin-top: 14px; background: #ffd400; color: #070b14; border: 0; border-radius: 8px; padding: 12px; font: inherit; font-weight: 800; letter-spacing: .04em; text-align: center; text-decoration: none; }
   .request-btn { display: block; box-sizing: border-box; width: 100%; margin-top: 10px; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; }
 </style>
 </head>
@@ -130,6 +131,7 @@ export function gatePage(message = "") {
         <button id="submit" type="submit">Enter</button>
     <div class="msg" id="msg" role="status">${message}</div>
   </form>
+  <a class="register-btn" href="https://www.playhq.com/afl/org/cockburn-lakes-perth-football-league/89b6bccc/register" target="_blank" rel="noopener">Register for 2027 <span>↗</span></a>
   <p class="request-hint">Don't have a PIN yet?</p>
   <a class="request-btn" href="${PIN_REQUEST_SMS}">Request your PIN with your name</a>
 </main>
