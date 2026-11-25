@@ -1,6 +1,8 @@
 name: Upload hub icons to R2 (manual)
 
 on:
+  push:
+    branches: [hub-icons-stats-fines]
   workflow_dispatch:
 
 permissions:
