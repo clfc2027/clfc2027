@@ -1,5 +1,5 @@
 import { passcodeState, constantTimeEqual } from "../../shared/auth.js";
-import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE, NO_QR_PAGE } from "./pages.js";
+import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE, NOTICEBOARD_PAGE } from "./pages.js";
 
 // Training check-in Worker (Tuesday and Thursday sessions, Perth time).
 // Bindings: DB -> playhq-warriors (member_directory, PIN check only)
@@ -7,7 +7,11 @@ import { SCAN_PAGE, WALL_PAGE, ADMIN_PAGE, NO_QR_PAGE } from "./pages.js";
 // Secrets: ADMIN_PASSCODE (shared admin passcode, fails closed if missing).
 //          QR_TOKEN (the token printed in the training QR, ?t=...). Scan page and check-in fail closed without it.
 // Attendance credit is computed in shared/training-credit.js, so the duty randomiser reads the same rule.
+// Bindings: TRAINING_DAY -> R2 bucket training-day (noticeboard header image, served at /noticeboard.png).
+// Noticeboard (/): players post an absence with their PIN. Writes training_absences, the same rows attendance credit reads.
+// Board clear and admin removals only hide names from the board (board_cleared_at, training_board_hidden). Absence rows are never deleted.
 // Cron: "45 9 * * 4" UTC = Thursday 5:45pm Perth. Runs the count.
+// Cron: "0 0 * * 5" UTC = Friday 8:00am Perth. Clears the noticeboard.
 
 var TZ_OFFSET_MS = 8 * 3600 * 1000; // Perth, UTC+8, no daylight saving
 var TRAINING_DOWS = [2, 4]; // Tuesday, Thursday (Date.getUTCDay values)
@@ -37,7 +41,8 @@ var SCHEMA = [
   "CREATE TABLE IF NOT EXISTS training_absences (session_date TEXT NOT NULL, member_id INTEGER NOT NULL, posted_at TEXT NOT NULL, PRIMARY KEY (session_date, member_id))",
   "CREATE TABLE IF NOT EXISTS training_wheel_rounds (round INTEGER PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL, spun_at TEXT, winner_member_id INTEGER)",
   "CREATE TABLE IF NOT EXISTS training_wheel_entries (round INTEGER NOT NULL, slot INTEGER NOT NULL, member_id INTEGER NOT NULL, run_start TEXT NOT NULL, milestone INTEGER NOT NULL, added_at TEXT NOT NULL, PRIMARY KEY (round, slot), UNIQUE (member_id, run_start, milestone))",
-  "CREATE TABLE IF NOT EXISTS training_pin_attempts (ip TEXT NOT NULL, attempted_at TEXT NOT NULL, ok INTEGER NOT NULL)"
+  "CREATE TABLE IF NOT EXISTS training_pin_attempts (ip TEXT NOT NULL, attempted_at TEXT NOT NULL, ok INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS training_board_hidden (session_date TEXT NOT NULL, member_id INTEGER NOT NULL, PRIMARY KEY (session_date, member_id))"
 ];
 
 var schemaReady = false;
@@ -245,9 +250,40 @@ async function handleAbsence(request, env, now) {
   var w = sessionWindow(target);
   await env.FLEXI.prepare("INSERT OR IGNORE INTO training_sessions (session_date, window_start, window_end, created_at) VALUES (?1, ?2, ?3, ?4)")
     .bind(target, w.start, w.end, now.toISOString()).run();
-  await env.FLEXI.prepare("INSERT OR IGNORE INTO training_absences (session_date, member_id, posted_at) VALUES (?1, ?2, ?3)")
+  // Re-posting moves posted_at forward, so a name cleared from the board can come back by posting again.
+  await env.FLEXI.prepare("INSERT INTO training_absences (session_date, member_id, posted_at) VALUES (?1, ?2, ?3) ON CONFLICT(session_date, member_id) DO UPDATE SET posted_at = excluded.posted_at")
     .bind(target, member.id, now.toISOString()).run();
   return json({ status: "ok", name: name, message: "Noted. You are down as not attending " + prettyDate(target) + "." });
+}
+
+// ---------- noticeboard ----------
+
+// Names posted for the next session, since the last board clear, minus names an admin removed.
+async function boardView(env, now) {
+  var settings = await getSettings(env);
+  var cleared = settings.board_cleared_at || "1970-01-01T00:00:00.000Z";
+  var target = nextSessionDate(now);
+  if (!target) return { session: null, sessionLabel: "", entries: [] };
+  var res = await env.FLEXI.prepare(
+    "SELECT a.member_id AS member_id, a.posted_at AS posted_at FROM training_absences a " +
+    "WHERE a.session_date = ?1 AND a.posted_at > ?2 " +
+    "AND NOT EXISTS (SELECT 1 FROM training_board_hidden h WHERE h.session_date = a.session_date AND h.member_id = a.member_id) " +
+    "ORDER BY a.posted_at"
+  ).bind(target, cleared).all();
+  var names = await memberNames(env);
+  return {
+    session: target,
+    sessionLabel: prettyDate(target),
+    entries: res.results.map(function (r) {
+      return { member_id: r.member_id, name: names.get(r.member_id) || "Unknown", posted_at: r.posted_at };
+    })
+  };
+}
+function publicBoard(board) {
+  return {
+    sessionLabel: board.sessionLabel,
+    entries: board.entries.map(function (e) { return { name: e.name }; })
+  };
 }
 
 // ---------- streaks and attendance ----------
@@ -460,7 +496,21 @@ async function handleAdmin(request, env, url, now) {
     var sess = await env.FLEXI.prepare(
       "SELECT s.session_date AS date, COUNT(c.member_id) AS scans FROM training_sessions s LEFT JOIN training_checkins c ON c.session_date = s.session_date GROUP BY s.session_date ORDER BY s.session_date DESC LIMIT 60"
     ).all();
-    return json({ settings: settings, attendance: attendance, sessions: sess.results, nextSession: nextSessionDate(now) });
+    var board = await boardView(env, now);
+    return json({ settings: settings, attendance: attendance, sessions: sess.results, nextSession: nextSessionDate(now), board: board });
+  }
+
+  if (method === "POST" && path === "/api/admin/board/remove") {
+    var rb = await request.json().catch(function () { return {}; });
+    if (!validYmd(rb.session_date) || !Number.isInteger(rb.member_id)) return json({ error: "Bad request" }, 400);
+    await env.FLEXI.prepare("INSERT OR IGNORE INTO training_board_hidden (session_date, member_id) VALUES (?1, ?2)")
+      .bind(rb.session_date, rb.member_id).run();
+    return json({ ok: true });
+  }
+
+  if (method === "POST" && path === "/api/admin/board/clear") {
+    await setSetting(env, "board_cleared_at", now.toISOString());
+    return json({ ok: true });
   }
 
   if (method === "GET" && path === "/api/admin/session") {
@@ -527,10 +577,17 @@ export default {
       var method = request.method;
       var now = new Date();
 
-      if (method === "GET" && (path === "/" || path === "/scan")) {
-        if (!qrTokenOk(url.searchParams.get("t"), env)) return page(NO_QR_PAGE);
-        return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
+      // The QR code lands on /?t=<token> and gets the check-in page. Anyone else gets the noticeboard.
+      if (method === "GET" && path === "/") {
+        if (qrTokenOk(url.searchParams.get("t"), env)) return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
+        return page(NOTICEBOARD_PAGE);
       }
+      if (method === "GET" && path === "/noticeboard.png") {
+        var nbImg = await env.TRAINING_DAY.get("file_000000008e888212a9d8b7c158b5c3e5.png");
+        if (!nbImg) return new Response("Not found", { status: 404 });
+        return new Response(nbImg.body, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" } });
+      }
+      if (method === "GET" && path === "/api/board") return json(publicBoard(await boardView(env, now)));
       if (method === "GET" && path === "/rego.jpg") {
         var img = await env.REGO.get("Screenshot_20261125_071551_Picsart.jpg");
         if (!img) return new Response("Not found", { status: 404 });
@@ -550,6 +607,11 @@ export default {
 
   async scheduled(event, env) {
     await ensureSchema(env);
+    if (event.cron === "0 0 * * 5") {
+      // Friday 8am Perth: clear the noticeboard. Display only, the absence rows stay for credit.
+      await setSetting(env, "board_cleared_at", new Date().toISOString());
+      return;
+    }
     await runCount(env, new Date());
   }
 };

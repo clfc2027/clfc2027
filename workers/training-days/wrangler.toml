@@ -21,8 +21,14 @@ database_id = "59096bce-7645-4f7b-a757-04290b67b063"
 binding = "REGO"
 bucket_name = "rego"
 
+# Noticeboard header image (served at /noticeboard.png).
+[[r2_buckets]]
+binding = "TRAINING_DAY"
+bucket_name = "training-day"
+
 # Thursday 5:45pm Perth (UTC+8) = 09:45 UTC on Thursday. Runs the count.
+# Friday 8:00am Perth (UTC+8) = 00:00 UTC on Friday. Clears the noticeboard.
 [triggers]
-crons = ["45 9 * * 4"]
+crons = ["45 9 * * 4", "0 0 * * 5"]
 
 # Secrets (dashboard, not in this file): ADMIN_PASSCODE

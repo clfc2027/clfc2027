@@ -101,17 +101,90 @@ document.getElementById('f').addEventListener('submit', async function (e) {
 </script>
 </body></html>`;
 
-export var NO_QR_PAGE = `<!doctype html>
+// Players training Noticeboard (/). The design image is the background. The PIN box, SUBMIT
+// button, session label and name list are placed over it using the image's own proportions
+// (941 x 1673), so they line up at any phone width. Sizes use container units (cqw).
+export var NOTICEBOARD_PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Training check-in</title>
-<style>${BASE_CSS}</style></head>
-<body><main>
-  <h1>Training check-in</h1>
-  <div class="card">
-    <p class="big">Scan the training QR code to check in.</p>
-    <p class="muted">Check-in only works from the QR code at training.</p>
-  </div>
-</main></body></html>`;
+<title>Players training Noticeboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b1a3a; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  .board { position: relative; width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 941 / 1673; background: #0b1a3a url('/noticeboard.png') center / 100% 100% no-repeat; container-type: inline-size; overflow: hidden; }
+  .abs { position: absolute; }
+  .postform { left: 0; top: 0; width: 100%; height: 100%; margin: 0; pointer-events: none; }
+  #pin { position: absolute; pointer-events: auto; left: 40.9%; top: 32.1%; width: 27.6%; height: 4.7%; border: 0; border-radius: 0; background: transparent; color: #0b2a6b; font: inherit; font-size: 5cqw; font-weight: 700; padding: 0 3cqw; outline: none; }
+  #submit { position: absolute; pointer-events: auto; left: 71.4%; top: 31.5%; width: 25.5%; height: 5.4%; border: 0; border-radius: 0; padding: 0; background: transparent; color: transparent; cursor: pointer; }
+  #submit:disabled { cursor: default; }
+  #sessionLabel { position: absolute; left: 50.7%; top: 39.4%; width: 46.5%; height: 4.8%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 4.4cqw; text-align: center; white-space: nowrap; overflow: hidden; }
+  #rows { position: absolute; left: 3.2%; top: 44.2%; width: 93.9%; height: 45.7%; overflow-y: auto; background: #fff; }
+  .r { display: grid; grid-template-columns: 49.8% 50.2%; height: 5.2cqw; }
+  .r:nth-child(odd) { background: #ffffff; }
+  .r:nth-child(even) { background: #d7e5f7; }
+  .c { display: flex; align-items: center; padding: 0 3cqw; color: #0b2a6b; font-size: 4.2cqw; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c.none { color: #5b6b8c; font-weight: 400; font-style: italic; }
+  .msg { max-width: 520px; min-height: 1.3em; margin: 12px auto 0; padding: 0 14px; color: #fff; text-align: center; font-size: 16px; }
+  .msg.ok { color: #9ff0b4; }
+  .msg.bad { color: #ffb3a8; }
+</style></head>
+<body>
+<div class="board">
+  <form id="postForm" class="abs postform" autocomplete="off">
+    <input id="pin" type="tel" inputmode="numeric" autocomplete="off" aria-label="PIN">
+    <button id="submit" type="submit" aria-label="Submit">Submit</button>
+  </form>
+  <div id="sessionLabel"></div>
+  <div id="rows"></div>
+</div>
+<p id="msg" class="msg" aria-live="polite"></p>
+<script>
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function say(msg, cls) { var n = $('msg'); n.textContent = msg || ''; n.className = 'msg ' + (cls || ''); }
+function renderBoard(d) {
+  $('sessionLabel').textContent = d.sessionLabel || '';
+  var rows = d.entries || [];
+  var html = '';
+  if (!rows.length) {
+    html = '<div class="r"><div class="c none">Nobody has posted yet.</div><div class="c"></div></div>';
+  } else {
+    rows.forEach(function (e) {
+      html += '<div class="r"><div class="c">' + esc(e.name) + '</div><div class="c"></div></div>';
+    });
+  }
+  $('rows').innerHTML = html;
+}
+async function loadBoard() {
+  try {
+    var r = await fetch('/api/board', { cache: 'no-store' });
+    renderBoard(await r.json());
+  } catch (err) { /* keep the board already on screen */ }
+}
+$('postForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  var pin = $('pin').value.trim();
+  if (!pin) { say('Enter your PIN.', 'bad'); return; }
+  var btn = $('submit');
+  btn.disabled = true;
+  say('Posting...', '');
+  try {
+    var r = await fetch('/api/absence', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
+    var d = await r.json().catch(function () { return {}; });
+    say(d.message || 'Something went wrong.', d.status === 'ok' ? 'ok' : 'bad');
+    if (d.status === 'ok') { $('pin').value = ''; await loadBoard(); }
+  } catch (err) {
+    say('Something went wrong. Try again.', 'bad');
+  }
+  btn.disabled = false;
+});
+loadBoard();
+setInterval(loadBoard, 60000);
+</script>
+</body></html>`;
 
 export var WALL_PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -224,6 +297,17 @@ export var ADMIN_PAGE = `<!doctype html>
       <tbody id="members"></tbody>
     </table>
 
+    <h2>Noticeboard</h2>
+    <p class="muted">Names posted for the next session. Remove hides a name from the board only. Their absence still counts for credit. Clear board hides everything posted so far.</p>
+    <div class="card">
+      <div id="boardSession" class="muted"></div>
+      <table>
+        <thead><tr><th>Name</th><th></th></tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+      <div class="row" style="margin-top:8px"><button id="clearBoard" class="alt">Clear board now</button></div>
+    </div>
+
     <h2>Sessions</h2>
     <p class="muted">Tap a session to see check-ins and remove a wrong one.</p>
     <table>
@@ -283,6 +367,7 @@ async function load() {
   $('lastRun').textContent = d.settings.last_count_run ? new Date(d.settings.last_count_run).toLocaleString('en-AU', { timeZone: 'Australia/Perth' }) : 'never';
 
   renderWheelAdmin(d.attendance.wheel);
+  renderBoardAdmin(d.board);
 
   $('members').innerHTML = d.attendance.members.map(function (m) {
     return '<tr><td>' + esc(m.name) + '</td><td class="r">' + m.sessions + '</td><td class="r">' + m.streak + '</td><td>' + esc(tierLabel(m.tier)) + '</td></tr>';
@@ -334,6 +419,24 @@ $('runCount').addEventListener('click', async function () {
   } catch (err) { say(err.message, 'bad'); }
 });
 
+function renderBoardAdmin(b) {
+  $('boardSession').textContent = b.sessionLabel ? 'Next session: ' + b.sessionLabel : 'No upcoming session.';
+  var html = '';
+  (b.entries || []).forEach(function (e) {
+    html += '<tr><td>' + esc(e.name) + '</td><td><button class="alt" data-board-remove="1" data-date="' + esc(b.session) + '" data-member="' + e.member_id + '">Remove</button></td></tr>';
+  });
+  $('board').innerHTML = html || '<tr><td colspan="2" class="muted">Nobody has posted yet.</td></tr>';
+}
+
+$('clearBoard').addEventListener('click', async function () {
+  if (!confirm('Clear the noticeboard now? Names are hidden, absences still count for credit.')) return;
+  try {
+    await api('/api/admin/board/clear', 'POST', {});
+    say('Noticeboard cleared.', 'ok');
+    await load();
+  } catch (err) { say(err.message, 'bad'); }
+});
+
 
 document.addEventListener('click', async function (e) {
   var t = e.target;
@@ -342,6 +445,12 @@ document.addEventListener('click', async function (e) {
       if (!confirm('Spin wheel ' + t.getAttribute('data-spin') + ' now?')) return;
       var s = await api('/api/admin/spin', 'POST', { round: Number(t.getAttribute('data-spin')) });
       say('Winner: ' + s.result.winner, 'ok');
+      await load();
+      return;
+    }
+    if (t.getAttribute && t.getAttribute('data-board-remove')) {
+      await api('/api/admin/board/remove', 'POST', { session_date: t.getAttribute('data-date'), member_id: Number(t.getAttribute('data-member')) });
+      say('Name removed from the board.', 'ok');
       await load();
       return;
     }
