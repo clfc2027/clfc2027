@@ -7,3 +7,8 @@ compatibility_date = "2026-11-01"
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
+
+# Tool icons on the hub, served at /hub-icons/<file> by worker.js.
+[[r2_buckets]]
+binding = "HUB_ICONS"
+bucket_name = "hub-icons"
