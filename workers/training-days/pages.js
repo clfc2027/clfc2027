@@ -130,8 +130,6 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
   .msg { max-width: 520px; min-height: 1.3em; margin: 12px auto 0; padding: 0 14px; color: #fff; text-align: center; font-size: 16px; }
   .msg.ok { color: #9ff0b4; }
   .msg.bad { color: #ffb3a8; }
-  .request-hint { color: #fff; text-align: center; margin: 16px 0 0; font-size: 15px; }
-  .request-btn { display: block; box-sizing: border-box; max-width: 520px; margin: 8px auto 0; padding: 12px 14px; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; font-weight: 700; font-size: 16px; text-align: center; text-decoration: none; }
   .hub-link { display: block; max-width: 520px; margin: 16px auto 24px; padding: 12px 14px; text-align: center; border-radius: 8px; background: #fff; color: #0b2a6b; font-weight: 700; font-size: 16px; text-decoration: none; }
 </style></head>
 <body>
@@ -144,8 +142,6 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
   <div id="rows"></div>
 </div>
 <p id="msg" class="msg" aria-live="polite"></p>
-<p class="request-hint">Don't have a PIN yet?</p>
-<a class="request-btn" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Request your PIN with your name</a>
 <a class="hub-link" href="https://cockburnlakes.com/">Return to hub</a>
 <script>
 function $(id) { return document.getElementById(id); }
