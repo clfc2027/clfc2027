@@ -260,5 +260,6 @@ body:not(.intro-lock) .site-shell { animation: page-reveal .9s .08s cubic-bezier
   .duty-check-input { width: 100%; }
 }
 
-/* Tool icons from the hub-icons bucket fill the square, keeping the outline. */
-.feature-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* Each tool card is its full image from the hub-icons bucket, no page chrome around it. */
+.tool-card { display: block; position: relative; }
+.tool-card img { display: block; width: 100%; height: auto; }
