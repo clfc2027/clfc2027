@@ -96,10 +96,10 @@
       <form method="dialog">
         <p class="kicker">MEMBER ACCESS</p>
         <h2 id="access-title">Request your PIN</h2>
-        <p class="access-msg">SMS <strong>CLFC pin request</strong> with your name to <a class="js-sms" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20"><strong>0451612744</strong></a> to get your 4 digit PIN.</p>
+        <p class="access-msg">SMS <strong>[insert your name to get pin]</strong> to <a class="js-sms" href="sms:+61451612744?body=%5Binsert%20your%20name%20to%20get%20pin%5D"><strong>0451612744</strong></a> to get your 4 digit PIN.</p>
         <div class="pin-actions">
           <button type="submit" class="button button-ghost">Close</button>
-          <a class="button button-primary js-sms" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Send SMS <span>↗</span></a>
+          <a class="button button-primary js-sms" href="sms:+61451612744?body=%5Binsert%20your%20name%20to%20get%20pin%5D">Send SMS <span>↗</span></a>
         </div>
       </form>
     </dialog>
@@ -145,7 +145,7 @@
 
         // iOS needs "&body=", Android/others use "?body="
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("CLFC pin request - ");
+        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("[insert your name to get pin]");
         document.querySelectorAll(".js-sms").forEach(function (l) { l.setAttribute("href", smsHref); });
 
         var accessDialog = document.getElementById("access-dialog");
