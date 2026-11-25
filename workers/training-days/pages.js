@@ -66,7 +66,7 @@ export var SCAN_PAGE = `<!doctype html>
     <p id="out" class="note big" aria-live="polite"></p>
   </div>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
-  <img src="/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
+  <img src="__BASE__/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
 </main>
 <script>
 var QR_TOKEN = '__QR_TOKEN__';
@@ -77,7 +77,7 @@ document.getElementById('f').addEventListener('submit', async function (e) {
   out.className = 'note big';
   out.textContent = 'Checking...';
   try {
-    var r = await fetch('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin, t: QR_TOKEN }) });
+    var r = await fetch('__BASE__/api/scan',{ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin, t: QR_TOKEN }) });
     var d = await r.json();
     if (d.name) {
       out.innerHTML = '';
@@ -110,7 +110,7 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #0b1a3a; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-  .board { position: relative; width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 941 / 1673; background: #0b1a3a url('/noticeboard.png') center / 100% 100% no-repeat; container-type: inline-size; overflow: hidden; }
+  .board { position: relative; width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 941 / 1673; background: #0b1a3a url('__BASE__/noticeboard.png') center / 100% 100% no-repeat; container-type: inline-size; overflow: hidden; }
   .abs { position: absolute; }
   .postform { left: 0; top: 0; width: 100%; height: 100%; margin: 0; pointer-events: none; }
   #pin { position: absolute; pointer-events: auto; left: 40.9%; top: 32.1%; width: 27.6%; height: 4.7%; border: 0; border-radius: 0; background: transparent; color: #0b2a6b; font: inherit; font-size: 5cqw; font-weight: 700; padding: 0 3cqw; outline: none; }
@@ -162,7 +162,7 @@ function renderBoard(d) {
 }
 async function loadBoard() {
   try {
-    var r = await fetch('/api/board', { cache: 'no-store' });
+    var r = await fetch('__BASE__/api/board',{ cache: 'no-store' });
     renderBoard(await r.json());
   } catch (err) { /* keep the board already on screen */ }
 }
@@ -174,7 +174,7 @@ $('postForm').addEventListener('submit', async function (e) {
   btn.disabled = true;
   say('Posting...', '');
   try {
-    var r = await fetch('/api/absence', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
+    var r = await fetch('__BASE__/api/absence',{ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
     var d = await r.json().catch(function () { return {}; });
     say(d.message || 'Something went wrong.', d.status === 'ok' ? 'ok' : 'bad');
     if (d.status === 'ok') { $('pin').value = ''; await loadBoard(); }
@@ -234,7 +234,7 @@ function renderWheel(wheel) {
 }
 async function load() {
   try {
-    var r = await fetch('/api/attendance');
+    var r = await fetch('__BASE__/api/attendance');
     var d = await r.json();
     var list = d.members.map(function (m) {
       return '<li class="m t-' + (m.tier || 'none') + '"><span class="n">' + esc(m.name) + '</span><span class="c">' + m.sessions + '</span></li>';
@@ -333,7 +333,7 @@ function say(msg, cls) { var n = $('note'); n.textContent = msg || ''; n.classNa
 async function api(path, method, body) {
   var opts = { method: method || 'GET', headers: { 'x-admin-passcode': pass, 'content-type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  var r = await fetch(path, opts);
+  var r = await fetch('__BASE__' + path, opts);
   var d = await r.json().catch(function () { return {}; });
   if (!r.ok) throw new Error(d.error || ('Error ' + r.status));
   return d;

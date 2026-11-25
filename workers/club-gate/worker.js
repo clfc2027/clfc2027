@@ -2,7 +2,7 @@
 //
 // D1 binding DB    -> playhq-warriors (member_directory: PIN check only)
 // D1 binding FLEXI -> clfc2026-flexi (gate_pin_attempts: lockout table)
-// Service bindings -> HUB (clfc2027), FINES, GAMEDAY, COACHES, PLAYERS, FGK, ADMIN
+// Service bindings -> HUB (clfc2027), FINES, GAMEDAY, COACHES, PLAYERS, FGK, TRAINING, ADMIN
 // Secret SESSION_SECRET (dashboard, never in the repo) signs the session cookie.
 //
 // Session: a 30-day signed cookie, set after a correct member PIN.
@@ -28,7 +28,8 @@ const TOOLS = [
   { prefix: "/colts", binding: "GAMEDAY" },
   { prefix: "/reserves", binding: "GAMEDAY" },
   { prefix: "/thirds", binding: "GAMEDAY" },
-  
+  { prefix: "/training", binding: "TRAINING" },
+
 ];
 
 export function targetBinding(pathname) {

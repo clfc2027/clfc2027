@@ -60,6 +60,17 @@ function page(body) {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
   });
 }
+// The Worker is served at /training behind the club gate, and at its workers.dev root. Both map to the same routes.
+// Pages write __BASE__ wherever a URL needs the prefix; pageFor fills it in.
+function basePrefix(pathname) {
+  return pathname === "/training" || pathname.indexOf("/training/") === 0 ? "/training" : "";
+}
+function stripBase(pathname) {
+  return pathname.replace(/^\/training(?=\/|$)/, "") || "/";
+}
+function pageFor(body, base) {
+  return page(body.split("__BASE__").join(base));
+}
 
 // ---------- Perth time helpers ----------
 
@@ -573,14 +584,16 @@ export default {
     try {
       await ensureSchema(env);
       var url = new URL(request.url);
+      var base = basePrefix(url.pathname);
+      url.pathname = stripBase(url.pathname);
       var path = url.pathname;
       var method = request.method;
       var now = new Date();
 
       // The QR code lands on /?t=<token> and gets the check-in page. Anyone else gets the noticeboard.
       if (method === "GET" && path === "/") {
-        if (qrTokenOk(url.searchParams.get("t"), env)) return page(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN));
-        return page(NOTICEBOARD_PAGE);
+        if (qrTokenOk(url.searchParams.get("t"), env)) return pageFor(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN), base);
+        return pageFor(NOTICEBOARD_PAGE, base);
       }
       if (method === "GET" && path === "/noticeboard.png") {
         var nbImg = await env.TRAINING_DAY.get("file_000000008e888212a9d8b7c158b5c3e5.png");
@@ -593,8 +606,8 @@ export default {
         if (!img) return new Response("Not found", { status: 404 });
         return new Response(img.body, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=3600" } });
       }
-      if (method === "GET" && path === "/attendance") return page(WALL_PAGE);
-      if (method === "GET" && path === "/admin") return page(ADMIN_PAGE);
+      if (method === "GET" && path === "/attendance") return pageFor(WALL_PAGE, base);
+      if (method === "GET" && path === "/admin") return pageFor(ADMIN_PAGE, base);
       if (method === "GET" && path === "/api/attendance") return json(publicView(await computeAttendance(env, now)));
       if (method === "POST" && path === "/api/scan") return handleScan(request, env, now);
       if (method === "POST" && path === "/api/absence") return handleAbsence(request, env, now);

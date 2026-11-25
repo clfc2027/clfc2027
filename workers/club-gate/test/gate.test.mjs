@@ -173,6 +173,9 @@ test("path to service mapping is exact on tool prefixes", () => {
   assert.equal(targetBinding("/finesx"), "HUB");
   assert.equal(targetBinding("/league"), "GAMEDAY");
   assert.equal(targetBinding("/leaguex"), "HUB");
+  assert.equal(targetBinding("/training"), "TRAINING");
+  assert.equal(targetBinding("/training/api/board"), "TRAINING");
+  assert.equal(targetBinding("/trainingx"), "HUB");
   assert.equal(targetBinding("/"), "HUB");
 });
 

@@ -37,6 +37,10 @@ binding = "COACHES"
 service = "coaches-board"
 
 [[services]]
+binding = "TRAINING"
+service = "training-days"
+
+[[services]]
 binding = "PLAYERS"
 service = "players-player"
 
