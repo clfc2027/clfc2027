@@ -1,0 +1,27 @@
+name: Upload hub icons to R2 (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload statistics icon
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put hub-icons/statistics.png --file hub-icons-upload/statistics.png --content-type image/png --remote
+
+      - name: Upload weekly-fines icon
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put hub-icons/weekly-fines.png --file hub-icons-upload/weekly-fines.png --content-type image/png --remote
