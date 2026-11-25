@@ -590,9 +590,11 @@ export default {
       var method = request.method;
       var now = new Date();
 
-      // The QR code lands on /?t=<token> and gets the check-in page. Anyone else gets the noticeboard.
+      // The QR code (workers.dev/?t=<token>) bypasses the club gate and gets the check-in page.
+      // The noticeboard lives behind the gate at cockburnlakes.com/training, so the open address sends other visitors there.
       if (method === "GET" && path === "/") {
         if (qrTokenOk(url.searchParams.get("t"), env)) return pageFor(SCAN_PAGE.replace("__QR_TOKEN__", env.QR_TOKEN), base);
+        if (!base) return new Response(null, { status: 302, headers: { Location: "https://cockburnlakes.com/training", "Cache-Control": "no-store" } });
         return pageFor(NOTICEBOARD_PAGE, base);
       }
       if (method === "GET" && path === "/noticeboard.png") {

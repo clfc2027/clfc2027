@@ -23,6 +23,8 @@ var BASE_CSS = `
   .ok { color: #137a2b; }
   .warn { color: #a15a00; }
   .bad { color: var(--red); }
+  .request-hint { color: var(--muted); text-align: center; margin: 16px 0 0; }
+  .request-btn { display: block; box-sizing: border-box; max-width: 640px; margin: 8px auto 0; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; }
 `;
 
 var WHEEL_CSS = `
@@ -66,7 +68,8 @@ export var SCAN_PAGE = `<!doctype html>
     <p id="out" class="note big" aria-live="polite"></p>
   </div>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
-  <p class="muted">No PIN? <a href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Request one by text</a>.</p>
+  <p class="request-hint">Don't have a PIN yet?</p>
+  <a class="request-btn" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Request your PIN with your name</a>
   <img src="__BASE__/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
 </main>
 <script>
@@ -127,6 +130,8 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
   .msg { max-width: 520px; min-height: 1.3em; margin: 12px auto 0; padding: 0 14px; color: #fff; text-align: center; font-size: 16px; }
   .msg.ok { color: #9ff0b4; }
   .msg.bad { color: #ffb3a8; }
+  .request-hint { color: #fff; text-align: center; margin: 16px 0 0; font-size: 15px; }
+  .request-btn { display: block; box-sizing: border-box; max-width: 520px; margin: 8px auto 0; padding: 12px 14px; background: #fff; color: #14213d; border: 2px solid #14213d; border-radius: 8px; font-weight: 700; font-size: 16px; text-align: center; text-decoration: none; }
   .hub-link { display: block; max-width: 520px; margin: 16px auto 24px; padding: 12px 14px; text-align: center; border-radius: 8px; background: #fff; color: #0b2a6b; font-weight: 700; font-size: 16px; text-decoration: none; }
 </style></head>
 <body>
@@ -139,7 +144,8 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
   <div id="rows"></div>
 </div>
 <p id="msg" class="msg" aria-live="polite"></p>
-<p class="msg"><a href="sms:+61451612744?body=CLFC%20pin%20request%20-%20" style="color:#fff">No PIN? Request one by text</a></p>
+<p class="request-hint">Don't have a PIN yet?</p>
+<a class="request-btn" href="sms:+61451612744?body=CLFC%20pin%20request%20-%20">Request your PIN with your name</a>
 <a class="hub-link" href="https://cockburnlakes.com/">Return to hub</a>
 <script>
 function $(id) { return document.getElementById(id); }
