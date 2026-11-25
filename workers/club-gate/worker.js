@@ -15,7 +15,7 @@ const COOKIE = "clfc_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
 const PIN_LOCK_MS = 15 * 60 * 1000;
-const PIN_REQUEST_SMS = "sms:+61451612744?body=CLFC%20pin%20request%20-%20";
+const PIN_REQUEST_SMS = "sms:+61451612744?body=%5Binsert%20your%20name%20to%20get%20pin%5D";
 
 // Tool prefixes (on the club domain) and the service that serves each.
 // Everything else goes to the hub.
@@ -132,8 +132,8 @@ export function gatePage(message = "") {
     <div class="msg" id="msg" role="status">${message}</div>
   </form>
   <a class="register-btn" href="https://www.playhq.com/afl/org/cockburn-lakes-perth-football-league/89b6bccc/register" target="_blank" rel="noopener">Register for 2027 <span>↗</span></a>
-  <p class="request-hint">Don't have a PIN yet?</p>
-  <a class="request-btn" href="${PIN_REQUEST_SMS}">Request your PIN with your name</a>
+  <p class="request-hint">Request your PIN</p>
+  <a class="request-btn" href="${PIN_REQUEST_SMS}">Request PIN</a>
 </main>
 </body>
 </html>`;
