@@ -99,7 +99,7 @@
         <p class="access-msg">Tap <strong>Request PIN</strong> and send us your name. We'll reply with your 4 digit PIN.</p>
         <div class="pin-actions">
           <button type="submit" class="button button-ghost">Close</button>
-          <a class="button button-primary js-sms" href="sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%20here%E2%9E%96%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F">Request PIN <span>↗</span></a>
+          <a class="button button-primary js-sms" href="sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%E2%9E%96%EF%B8%8F%E2%9A%A0%EF%B8%8F">Request PIN <span>↗</span></a>
         </div>
       </form>
     </dialog>
@@ -145,7 +145,7 @@
 
         // iOS needs "&body=", Android/others use "?body="
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("⚠️⚠️➡️➡️➖️insert your name here➖️⬅️⬅️⚠️⚠️");
+        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("⚠️➖️insert your name➖️⚠️");
         document.querySelectorAll(".js-sms").forEach(function (l) { l.setAttribute("href", smsHref); });
 
         var accessDialog = document.getElementById("access-dialog");

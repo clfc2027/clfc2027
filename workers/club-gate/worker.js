@@ -15,7 +15,7 @@ const COOKIE = "clfc_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
 const PIN_LOCK_MS = 15 * 60 * 1000;
-const PIN_REQUEST_SMS = "sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%20here%E2%9E%96%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F";
+const PIN_REQUEST_SMS = "sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%E2%9E%96%EF%B8%8F%E2%9A%A0%EF%B8%8F";
 
 // Tool prefixes (on the club domain) and the service that serves each.
 // Everything else goes to the hub.

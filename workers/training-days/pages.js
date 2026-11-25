@@ -69,7 +69,7 @@ export var SCAN_PAGE = `<!doctype html>
   </div>
   <p class="muted">Tuesdays and Thursdays, 5:15pm to 7:00pm.</p>
   <p class="request-hint">Request your PIN</p>
-  <a class="request-btn" href="sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%A1%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%20here%E2%9E%96%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%AC%85%EF%B8%8F%E2%9A%A0%EF%B8%8F%E2%9A%A0%EF%B8%8F">Request PIN</a>
+  <a class="request-btn" href="sms:+61451612744?body=%E2%9A%A0%EF%B8%8F%E2%9E%96%EF%B8%8Finsert%20your%20name%E2%9E%96%EF%B8%8F%E2%9A%A0%EF%B8%8F">Request PIN</a>
   <img src="__BASE__/rego.jpg" alt="Training check-in" style="display:block;width:100%;height:auto;margin-top:16px;border-radius:12px">
 </main>
 <script>
