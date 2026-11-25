@@ -259,3 +259,6 @@ body:not(.intro-lock) .site-shell { animation: page-reveal .9s .08s cubic-bezier
   .duty-check-form h2 { width: 100%; }
   .duty-check-input { width: 100%; }
 }
+
+/* Tool icons from the hub-icons bucket fill the square, keeping the outline. */
+.feature-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
