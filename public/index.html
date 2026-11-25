@@ -99,7 +99,7 @@
         <p class="access-msg">Tap <strong>Request PIN</strong> and send us your name. We'll reply with your 4 digit PIN.</p>
         <div class="pin-actions">
           <button type="submit" class="button button-ghost">Close</button>
-          <a class="button button-primary js-sms" href="sms:+61451612744?body=%5Binsert%20your%20name%20to%20get%20pin%5D">Request PIN <span>↗</span></a>
+          <a class="button button-primary js-sms" href="sms:+61451612744?body=%5Binsert%20your%20name%5D">Request PIN <span>↗</span></a>
         </div>
       </form>
     </dialog>
@@ -145,7 +145,7 @@
 
         // iOS needs "&body=", Android/others use "?body="
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("[insert your name to get pin]");
+        var smsHref = "sms:+61451612744" + (isIOS ? "&" : "?") + "body=" + encodeURIComponent("[insert your name]");
         document.querySelectorAll(".js-sms").forEach(function (l) { l.setAttribute("href", smsHref); });
 
         var accessDialog = document.getElementById("access-dialog");
