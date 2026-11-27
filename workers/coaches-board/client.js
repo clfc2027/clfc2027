@@ -175,7 +175,7 @@ function gateHtml() {
       <p>Enter the 4-digit PIN to open the coaches board.</p>
       <form id="gateForm" class="gate-form">
         <input id="gatePin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off"\${disabled}>
-        <button class="btn-primary" type="submit"\${disabled}>\${state.busy ? "Checking…" : "Unlock"}</button>
+        <button class="btn-primary unlock-btn" type="submit"\${disabled}>\${state.busy ? "Checking…" : "Unlock"}</button>
       </form>
       <div class="gate-error">\${escapeHtml(state.gateError)}</div>
     </div>\`;
@@ -185,13 +185,14 @@ function render() {
   refreshDisplay();
   document.body.classList.toggle("presenting", state.presenting);
   const grade = currentGrade();
+  const teamHeading = state.unlocked && grade ? (TEAM_LABELS[String(grade.grade_id)] || "") : "";
   const header = \`
     <header class="masthead">
       <div class="brand">
         <div class="brand-mark">CL</div>
         <div>
-          <h1>Cockburn Lakes Coaches Board</h1>
-          <div class="sub">CLFC 2027 Season</div>
+          <h1 class="\${teamHeading ? "team-glow" : ""}">\${teamHeading || "Coaches Board"}</h1>
+          <div class="sub">Cockburn Lakes Coaches Board · CLFC 2027 Season</div>
         </div>
       </div>
       <div class="masthead-right">
