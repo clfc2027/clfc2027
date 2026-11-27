@@ -26,6 +26,7 @@ input, select { font-family: inherit; }
 .masthead .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(160deg, var(--red), var(--red-dark)); display: grid; place-items: center; font: 900 16px/1 "Oswald", sans-serif; box-shadow: 0 0 0 3px rgba(255,255,255,.08), 0 0 24px var(--glow); }
 .masthead h1 { font-size: 20px; letter-spacing: .06em; }
+.masthead h1.team-glow { font-size: 64px; line-height: 1; color: #fff; text-shadow: 0 0 4px #fff, 0 0 12px var(--red), 0 0 26px var(--red), 0 0 44px var(--red); }
 .masthead .sub { color: var(--silver); font-size: 11px; letter-spacing: .1em; }
 .present-toggle { background: rgba(255,255,255,.08); color: #fff; padding: 9px 16px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--line); }
 .present-toggle:hover { background: rgba(255,255,255,.16); }
@@ -228,7 +229,8 @@ body.presenting .compare-bar { display: none; }
 .gate-card { max-width: 420px; margin: 48px auto; padding: 28px 24px; background: #ffffff; color: var(--navy, #0a1730); border-radius: 10px; text-align: center; box-shadow: 0 8px 28px rgba(0,0,0,0.18); }
 .gate-card h3 { margin: 4px 0 8px; font: 900 24px/1.1 "Oswald", sans-serif; text-transform: uppercase; }
 .gate-card p { margin: 0 0 16px; font-size: 14px; }
-.gate-form { display: flex; gap: 10px; justify-content: center; align-items: center; }
+.gate-form { display: flex; flex-direction: column; gap: 14px; justify-content: center; align-items: center; }
+.gate-form .unlock-btn { width: 100%; padding: 16px 20px; font: 900 22px/1 "Oswald", sans-serif; letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 0 0 0 var(--glow), 0 6px 18px rgba(200,16,46,.35); }
 .gate-form input { width: 130px; font-size: 24px; letter-spacing: 8px; text-align: center; padding: 8px; }
 .gate-error { min-height: 1.3em; margin-top: 12px; color: #b00020; font-size: 13px; }
 `;
