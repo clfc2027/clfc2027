@@ -263,3 +263,6 @@ body:not(.intro-lock) .site-shell { animation: page-reveal .9s .08s cubic-bezier
 /* Each tool card is its full image from the hub-icons bucket, no page chrome around it. */
 .tool-card { display: block; position: relative; }
 .tool-card img { display: block; width: 100%; height: auto; }
+
+/* Hub tool cards: two across, four down, at a reduced overall size on every screen. */
+.feature-layout { grid-template-columns: 1fr 1fr; width: 72%; max-width: 560px; margin: 0 auto; gap: 10px; }
