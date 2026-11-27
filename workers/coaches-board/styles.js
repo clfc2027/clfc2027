@@ -232,6 +232,6 @@ body.presenting .compare-bar { display: none; }
 .gate-form .unlock-btn { width: 100%; padding: 16px 20px; font: 900 22px/1 "Oswald", sans-serif; letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 0 0 0 var(--glow), 0 6px 18px rgba(200,16,46,.35); }
 .gate-form input { width: 130px; font-size: 24px; letter-spacing: 8px; text-align: center; padding: 8px; }
 .gate-error { min-height: 1.3em; margin-top: 12px; color: #b00020; font-size: 13px; }
-`;
 .save-row { display: flex; justify-content: flex-end; margin: 4px 0 16px; }
 .save-btn { width: 120px; height: 120px; border-radius: 0; padding: 10px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; line-height: 1.2; white-space: normal; }
+`;
