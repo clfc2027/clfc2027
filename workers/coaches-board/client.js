@@ -238,13 +238,13 @@ function render() {
         <label>Match time</label>
         <input id="timeInput" type="time" value="\${escapeAttr(state.matchTime)}">
       </div>
+      <div class="save-row action-buttons-wrap">
+        <button class="btn-primary save-btn" id="saveBtn">Save Team</button>
+      </div>
       <div class="action-buttons action-buttons-wrap">
         <button class="btn-ghost" id="loadBtn">Load</button>
         <button class="btn-ghost" id="clearBtn">Clear</button>
         <button class="btn-ghost" id="lockBtn">Lock</button>
-      </div>
-      <div class="save-row action-buttons-wrap">
-        <button class="btn-primary save-btn" id="saveBtn">Save Team</button>
       </div>
     </div>
 
