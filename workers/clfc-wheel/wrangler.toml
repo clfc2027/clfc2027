@@ -1,0 +1,21 @@
+# clfc-wheel (stand-in wheel page), code as deployed from the repo.
+name = "clfc-wheel"
+main = "worker.js"
+compatibility_date = "2026-08-31"
+
+# Secret (dashboard, not in this file): ADMIN_PIN
+
+# Names list for the wheel.
+[[kv_namespaces]]
+binding = "WHEEL"
+id = "449b9dc2cba940d1a6eaf51f87bf31c3"
+
+# Warrior image and winner banner (served at /warrior.png and /winner-banner.png).
+[[r2_buckets]]
+binding = "REGO"
+bucket_name = "rego"
+
+# Full-page wallpaper (served at /wallpaper.jpg).
+[[r2_buckets]]
+binding = "CLFC_ASSETS"
+bucket_name = "clfc-assets"
