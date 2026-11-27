@@ -3,6 +3,10 @@ name = "players-player"
 main = "worker.js"
 compatibility_date = "2026-11-07"
 
+# Members reach this only through cockburnlakes.com (behind the club gate), never the workers.dev address.
+workers_dev = false
+preview_urls = false
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playhq-warriors"

@@ -3,6 +3,10 @@ name = "weekly-fines"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
+# Members reach this only through cockburnlakes.com (behind the club gate), never the workers.dev address.
+workers_dev = false
+preview_urls = false
+
 # Member PIN check only (member_directory). Nothing is written here.
 [[d1_databases]]
 binding = "DB"
