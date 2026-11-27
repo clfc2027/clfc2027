@@ -49,7 +49,7 @@ input, select { font-family: inherit; }
 
 .team-banner { text-align: center; padding: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.03); margin-bottom: 18px; }
 .team-banner .club { font-size: 12px; letter-spacing: .18em; color: var(--silver); }
-.team-banner .grade { font: 900 30px/1.05 "Oswald", sans-serif; margin: 4px 0; }
+.team-banner .grade { font: 900 52px/1 "Oswald", sans-serif; margin: 6px 0; text-transform: uppercase; letter-spacing: .06em; color: #fff; text-shadow: 0 0 4px #fff, 0 0 12px var(--red), 0 0 26px var(--red), 0 0 44px var(--red); }
 .team-banner .round { font-size: 13px; color: var(--silver); letter-spacing: .08em; margin-bottom: 6px; }
 .team-banner .versus { display: flex; align-items: center; justify-content: center; gap: 14px; font: 700 18px "Oswald", sans-serif; }
 .team-banner .versus .vs { color: var(--red); font-size: 12px; letter-spacing: .2em; }
