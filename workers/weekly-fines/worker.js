@@ -325,6 +325,15 @@ function page(request, html) {
   });
 }
 
+// Serves an object from R2 (used for the wallpaper).
+async function serveR2(bucket, key, cacheControl) {
+  if (!bucket) return new Response("Not found", { status: 404 });
+  const obj = await bucket.get(key);
+  if (!obj) return new Response("Not found", { status: 404 });
+  const type = (obj.httpMetadata && obj.httpMetadata.contentType) || "image/jpeg";
+  return new Response(obj.body, { headers: { "Content-Type": type, "Cache-Control": cacheControl } });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -338,6 +347,9 @@ export default {
       }
       if ((method === "GET" || method === "HEAD") && pathname === "/admin") {
         return page(request, ADMIN_HTML);
+      }
+      if ((method === "GET" || method === "HEAD") && pathname === "/wallpaper.jpg") {
+        return serveR2(env.CLFC_ASSETS, "wallpaper.jpg", "public, max-age=3600");
       }
 
       if (pathname === "/api/fines" && method === "GET") {
