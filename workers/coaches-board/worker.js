@@ -206,7 +206,7 @@ async function verifyBoardPin(env, db, pin) {
   }
   const given = typeof pin === "string" ? pin : "";
   const members = given
-    ? ((await db.prepare(`SELECT id, role FROM member_directory WHERE pin = ?1`).bind(given).all()).results || [])
+    ? ((await env.DB.prepare(`SELECT id, role FROM member_directory WHERE pin = ?1`).bind(given).all()).results || [])
     : [];
   let access = null;
   if (members.some((m) => m.id === ADMIN_MEMBER_ID)) {
