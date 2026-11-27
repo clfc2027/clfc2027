@@ -185,14 +185,13 @@ function render() {
   refreshDisplay();
   document.body.classList.toggle("presenting", state.presenting);
   const grade = currentGrade();
-  const teamHeading = state.unlocked && grade ? (TEAM_LABELS[String(grade.grade_id)] || "") : "";
   const header = \`
     <header class="masthead">
       <div class="brand">
         <div class="brand-mark">CL</div>
         <div>
-          <h1 class="\${teamHeading ? "team-glow" : ""}">\${teamHeading || "Coaches Board"}</h1>
-          <div class="sub">Cockburn Lakes Coaches Board · CLFC 2027 Season</div>
+          <h1>Cockburn Lakes Coaches Board</h1>
+          <div class="sub">CLFC 2027 Season</div>
         </div>
       </div>
       <div class="masthead-right">
@@ -243,7 +242,9 @@ function render() {
         <button class="btn-ghost" id="loadBtn">Load</button>
         <button class="btn-ghost" id="clearBtn">Clear</button>
         <button class="btn-ghost" id="lockBtn">Lock</button>
-        <button class="btn-primary" id="saveBtn">Save Team</button>
+      </div>
+      <div class="save-row action-buttons-wrap">
+        <button class="btn-primary save-btn" id="saveBtn">Save Team</button>
       </div>
     </div>
 
