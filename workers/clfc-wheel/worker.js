@@ -253,7 +253,7 @@ const WHEEL_PAGE = `<!DOCTYPE html>
   @keyframes tick { from { transform: rotate(-12deg); } to { transform: rotate(8deg); } }
   .spinner { position: relative; width: 100%; }
   .spinner canvas { display: block; width: 100%; height: auto; border-radius: 50%; box-shadow: 0 0 0 6px #1d4fd8, 0 6px 14px rgba(0,0,0,.35); }
-  .hub { position: absolute; left: 50%; top: 50%; width: 26%; aspect-ratio: 1 / 1; object-fit: cover; transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid #fff; background: #0a3161; box-shadow: 0 0 0 4px #1d4fd8; pointer-events: none; }
+  .hub { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; box-shadow: 0 0 0 6px #1d4fd8, 0 6px 14px rgba(0,0,0,.35); pointer-events: none; }
   .lever-col { display: flex; flex-direction: column; align-items: center; }
   .lever { position: relative; width: 70px; height: 190px; background: none; border: none; padding: 0; cursor: pointer; }
   .lever-base { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 64px; height: 26px; border-radius: 8px; background: #b0193c; box-shadow: 0 4px 0 #7a0d24; }
