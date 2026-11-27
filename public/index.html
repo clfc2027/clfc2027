@@ -124,27 +124,34 @@
         </div>
       </form>
     </dialog>
-    <dialog id="spin-dialog" class="pin-dialog spin-dialog" aria-labelledby="spin-title">
-      <p class="kicker">WARRIORS</p>
-      <h2 id="spin-title">Spin &amp; Win</h2>
-      <div class="spin-stage">
-        <div class="spin-pointer" aria-hidden="true"></div>
+    <dialog id="spin-dialog" class="spin-dialog" aria-label="Spin and Win">
+      <div class="spin-art">
+        <img src="/assets/spin-wheel-poster.jpg" alt="" />
         <svg id="spinWheel" viewBox="0 0 400 400" role="img" aria-label="Names on the wheel"></svg>
+        <button type="button" class="spin-hit spin-hit-go" id="spinGo" aria-label="Spin"></button>
+        <button type="button" class="spin-hit spin-hit-lever" id="spinLever" aria-label="Spin"></button>
       </div>
       <p class="spin-result" id="spinResult" aria-live="polite"></p>
       <p class="spin-count" id="spinCount"></p>
       <div class="pin-actions">
         <button type="button" class="button button-ghost" id="spinClose">Close</button>
-        <button type="button" class="button button-primary" id="spinGo">Spin</button>
       </div>
     </dialog>
 
     <style>
       .access-msg{line-height:1.5;margin:0}
-      .spin-dialog{width:min(440px,calc(100% - 24px))}
-      .spin-stage{position:relative;width:100%;aspect-ratio:1;margin:12px 0 4px}
-      #spinWheel{width:100%;height:100%;display:block;transform-origin:50% 50%}
-      .spin-pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:24px solid #e10600;z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))}
+      .spin-dialog{width:min(420px,calc(100% - 24px));padding:14px;border:0;border-radius:18px;background:#070b14;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+      .spin-dialog::backdrop{background:rgba(3,6,12,.8);backdrop-filter:blur(4px)}
+      .spin-art{position:relative;width:100%}
+      .spin-art > img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+      /* Wheel sits inside the poster's wheel face (positions measured on the 1122x1402 artwork). */
+      #spinWheel{position:absolute;left:20.5%;top:26.4%;width:58.8%;height:auto;aspect-ratio:1;display:block;transform-origin:50% 50%;border-radius:50%}
+      /* Invisible hit areas over the SPIN button and the lever. */
+      .spin-hit{position:absolute;margin:0;padding:0;border:0;background:transparent;cursor:pointer}
+      .spin-hit-go{left:16.9%;top:81.3%;width:63.7%;height:9.3%;border-radius:12px}
+      .spin-hit-lever{left:83.8%;top:57.1%;width:11.1%;height:15%;border-radius:50%}
+      .spin-hit:disabled{cursor:default}
+      .spin-hit:focus-visible{outline:3px solid #ffd400;outline-offset:2px}
       .spin-result{min-height:1.6em;margin:12px 0 2px;text-align:center;font-size:1.2rem;font-weight:800}
       .spin-count{margin:0;text-align:center;font-size:.85rem;opacity:.7}
       .access-msg a{color:#ffd400;text-decoration:none}
