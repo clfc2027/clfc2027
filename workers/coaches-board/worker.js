@@ -440,6 +440,62 @@ async function getLatestDuties(flexi) {
   }
 }
 
+// ---------- Change PIN (public; a member proves their current PIN, then picks a new one) ----------
+// The new PIN is written to the member's own row (member_directory.id), so their name, duties and
+// history stay attached to them. Wrong current PINs share the duty-check per-IP limit.
+// The log records who changed their PIN and when. It never stores either PIN value.
+async function changePinByMember(request, env) {
+  let body = {};
+  try { body = await request.json(); } catch (e) { body = {}; }
+  const currentPin = typeof body.currentPin === "string" ? body.currentPin.trim() : "";
+  const newPin = typeof body.newPin === "string" ? body.newPin.trim() : "";
+  if (!/^\d{4}$/.test(currentPin) || !/^\d{4}$/.test(newPin)) throw httpError("PINs must be 4 digits.", 400);
+  if (currentPin === newPin) throw httpError("Choose a PIN different from your current one.", 400);
+
+  const flexi = env.FLEXI;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  await flexi.prepare(
+    `CREATE TABLE IF NOT EXISTS duty_pin_attempts (ip TEXT PRIMARY KEY, fails INTEGER NOT NULL, window_start TEXT NOT NULL)`
+  ).run();
+  const att = await flexi.prepare(`SELECT fails, window_start FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).first();
+  const now = Date.now();
+  const inWindow = !!att && now - Date.parse(att.window_start) < DUTY_CHECK_WINDOW_MS;
+  if (inWindow && att.fails >= DUTY_CHECK_MAX_FAILS) {
+    throw httpError("Too many attempts. Try again in 15 minutes.", 429);
+  }
+
+  const member = await env.DB.prepare(
+    `SELECT id, first_name, last_name FROM member_directory WHERE pin = ?1`
+  ).bind(currentPin).first();
+  if (!member) {
+    const fails = inWindow ? att.fails + 1 : 1;
+    const start = inWindow ? att.window_start : new Date(now).toISOString();
+    await flexi.prepare(
+      `INSERT INTO duty_pin_attempts (ip, fails, window_start) VALUES (?1, ?2, ?3)
+         ON CONFLICT (ip) DO UPDATE SET fails = ?2, window_start = ?3`
+    ).bind(ip, fails, start).run();
+    throw httpError("Current PIN not recognised.", 401);
+  }
+  await flexi.prepare(`DELETE FROM duty_pin_attempts WHERE ip = ?1`).bind(ip).run();
+
+  // A PIN must identify one person, so the new one cannot belong to anyone else.
+  const taken = await env.DB.prepare(
+    `SELECT id FROM member_directory WHERE pin = ?1 AND id <> ?2`
+  ).bind(newPin, member.id).first();
+  if (taken) throw httpError("That PIN is already in use. Choose another.", 409);
+
+  await env.DB.prepare(`UPDATE member_directory SET pin = ?1 WHERE id = ?2`).bind(newPin, member.id).run();
+
+  const name = (member.first_name + " " + member.last_name).trim();
+  await flexi.prepare(
+    `CREATE TABLE IF NOT EXISTS pin_change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, member_name TEXT NOT NULL, changed_at TEXT NOT NULL, ip TEXT NOT NULL)`
+  ).run();
+  await flexi.prepare(
+    `INSERT INTO pin_change_log (member_id, member_name, changed_at, ip) VALUES (?1, ?2, ?3, ?4)`
+  ).bind(member.id, name, new Date(now).toISOString(), ip).run();
+  return { ok: true, name: name };
+}
+
 // ---------- Game day duty checker (public; a member enters their PIN) ----------
 var DUTY_CHECK_MAX_FAILS = 10;
 var DUTY_CHECK_WINDOW_MS = 15 * 60 * 1000;
@@ -809,6 +865,9 @@ var worker_default = {
       }
       if (pathname === "/api/duties/check" && method === "POST") {
         return json(await checkDutiesByPin(request, env));
+      }
+      if (pathname === "/api/pin/change" && method === "POST") {
+        return json(await changePinByMember(request, env));
       }
       // Coaches only (PIN in x-coach-pin)
       if (pathname === "/api/players" && method === "GET") {
