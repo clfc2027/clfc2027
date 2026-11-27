@@ -10,7 +10,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
 <style>
   :root { --navy: #14213d; --gold: #fca311; --ink: #1d1d1f; --muted: #5b6270; --line: #e3e6ec; --bg: #f5f6f8; --red: #b42318; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: linear-gradient(rgba(245,246,248,.88), rgba(245,246,248,.88)), url("/fines/wallpaper.jpg") center / cover fixed no-repeat, var(--bg); }
   header { background: var(--navy); color: #fff; padding: 20px 16px; }
   header h1 { margin: 0; font-size: 1.4rem; }
   header p { margin: 6px 0 0; opacity: .85; font-size: .95rem; }
@@ -196,7 +196,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 <style>
   :root { --navy: #14213d; --ink: #1d1d1f; --muted: #5b6270; --line: #e3e6ec; --bg: #f5f6f8; --red: #b42318; --green: #067647; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: linear-gradient(rgba(245,246,248,.88), rgba(245,246,248,.88)), url("/fines/wallpaper.jpg") center / cover fixed no-repeat, var(--bg); }
   header { background: var(--navy); color: #fff; padding: 16px; }
   header h1 { margin: 0; font-size: 1.3rem; }
   main { max-width: 1000px; margin: 0 auto; padding: 16px; }
