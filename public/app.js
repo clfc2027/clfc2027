@@ -202,6 +202,7 @@ if (intro && introVideo) {
   const count = document.getElementById('spinCount');
   const go = document.getElementById('spinGo');
   const closeBtn = document.getElementById('spinClose');
+  const lever = document.getElementById('spinLever');
   const SPIN_MS = 5000;
   let members = [];
   let rotation = 0;
@@ -253,9 +254,14 @@ if (intro && introVideo) {
     svg.appendChild(hub);
   }
 
+  function setSpinEnabled(on) {
+    go.disabled = !on;
+    lever.disabled = !on;
+  }
+
   function updateCount() {
     count.textContent = members.length + (members.length === 1 ? ' name' : ' names') + ' left on the wheel';
-    go.disabled = members.length === 0;
+    setSpinEnabled(members.length > 0);
     if (!members.length) result.textContent = 'Everyone has had their spin.';
   }
 
@@ -277,7 +283,7 @@ if (intro && introVideo) {
   async function spin() {
     if (spinning || !members.length) return;
     spinning = true;
-    go.disabled = true;
+    setSpinEnabled(false);
     result.textContent = '';
     try {
       const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -306,7 +312,7 @@ if (intro && introVideo) {
       result.textContent = 'Could not reach the hub. Check your connection.';
     } finally {
       spinning = false;
-      go.disabled = members.length === 0;
+      setSpinEnabled(members.length > 0);
     }
   }
 
@@ -316,4 +322,5 @@ if (intro && introVideo) {
   });
   closeBtn.addEventListener('click', function () { if (!spinning) dialog.close(); });
   go.addEventListener('click', spin);
+  lever.addEventListener('click', spin);
 })();
