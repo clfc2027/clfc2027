@@ -39,7 +39,7 @@
           <div class="hero-grid" aria-hidden="true"></div>
           <div class="hero-copy">
             <div id="a2hs-slot"></div>
-            <a class="register-cta js-sms" href="sms:+61451612744">REQUEST PIN <span>↗</span></a>
+            <a class="register-cta pin-banner-cta js-sms" href="sms:+61451612744"><img src="/hub-icons/pin-change-request-icon.png?v=1" alt="Request PIN or change PIN" /></a>
           </div>
           <div class="hero-art" aria-label="Cockburn Lakes Football Club Warriors artwork">
             <div class="art-ring art-ring-one"></div>
@@ -108,6 +108,9 @@
       .access-msg a{color:#ffd400;text-decoration:none}
       .register-cta{display:inline-flex;align-items:center;gap:12px;margin-top:28px;padding:20px 38px;font-size:clamp(1.15rem,2.4vw,1.6rem);font-weight:900;letter-spacing:.08em;color:#070b14;background:#ffd400;border-radius:999px;text-decoration:none;box-shadow:0 0 0 0 rgba(255,212,0,.7),0 12px 30px rgba(255,212,0,.35);animation:regpulse 2s infinite;transition:transform .15s ease}
       .register-cta:hover,.register-cta:focus-visible{transform:translateY(-2px) scale(1.03);background:#fff}
+      .pin-banner-cta{display:block;margin-top:28px;padding:0;background:none;box-shadow:none;border-radius:0;animation:none}
+      .pin-banner-cta img{display:block;width:min(100%,560px);height:auto}
+      .pin-banner-cta:hover,.pin-banner-cta:focus-visible{background:none}
       @keyframes regpulse{0%{box-shadow:0 0 0 0 rgba(255,212,0,.7),0 12px 30px rgba(255,212,0,.35)}70%{box-shadow:0 0 0 18px rgba(255,212,0,0),0 12px 30px rgba(255,212,0,.35)}100%{box-shadow:0 0 0 0 rgba(255,212,0,0),0 12px 30px rgba(255,212,0,.35)}}
       @media (prefers-reduced-motion:reduce){.register-cta{animation:none}}
       .hero-copy{padding-top:20px}
