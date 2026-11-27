@@ -26,7 +26,6 @@ input, select { font-family: inherit; }
 .masthead .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(160deg, var(--red), var(--red-dark)); display: grid; place-items: center; font: 900 16px/1 "Oswald", sans-serif; box-shadow: 0 0 0 3px rgba(255,255,255,.08), 0 0 24px var(--glow); }
 .masthead h1 { font-size: 20px; letter-spacing: .06em; }
-.masthead h1.team-glow { font-size: 64px; line-height: 1; color: #fff; text-shadow: 0 0 4px #fff, 0 0 12px var(--red), 0 0 26px var(--red), 0 0 44px var(--red); }
 .masthead .sub { color: var(--silver); font-size: 11px; letter-spacing: .1em; }
 .present-toggle { background: rgba(255,255,255,.08); color: #fff; padding: 9px 16px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--line); }
 .present-toggle:hover { background: rgba(255,255,255,.16); }
@@ -133,7 +132,7 @@ input, select { font-family: inherit; }
 .status-line.ok { color: #7fe0a0; }
 
 .presenting .controls-bar, .presenting .action-buttons, .presenting .interchange-panel h3 { }
-body.presenting .controls-bar, body.presenting .action-buttons-wrap, body.presenting .present-toggle span.edit-label { display: none; }
+body.presenting .controls-bar, body.presenting .action-buttons-wrap, body.presenting .save-row, body.presenting .present-toggle span.edit-label { display: none; }
 body.presenting .slot-card .remove-x { display: none !important; }
 body.presenting #app { max-width: 720px; }
 
@@ -234,3 +233,5 @@ body.presenting .compare-bar { display: none; }
 .gate-form input { width: 130px; font-size: 24px; letter-spacing: 8px; text-align: center; padding: 8px; }
 .gate-error { min-height: 1.3em; margin-top: 12px; color: #b00020; font-size: 13px; }
 `;
+.save-row { display: flex; justify-content: flex-end; margin: 4px 0 16px; }
+.save-btn { width: 120px; height: 120px; border-radius: 0; padding: 10px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; line-height: 1.2; white-space: normal; }
