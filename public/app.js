@@ -91,9 +91,9 @@ if (intro && introVideo) {
       const first = (data.name || '').split(' ')[0];
       const named = data.named || [];
       const duties = data.duties || [];
-      // Nobody named and no duty: keep showing up.
+      // Not named and no duty this week.
       if (!named.length && !duties.length) {
-        return show('Hello ' + first + ', all you can do is keep showing up. See you on the track Tuesday.', false);
+        return show('Nothing this week', false);
       }
       const namedList = joinNames(named);
       const dutyText = duties.map(function (d) {
