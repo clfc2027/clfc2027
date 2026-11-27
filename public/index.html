@@ -48,7 +48,7 @@
           <div class="hero-art" aria-label="Cockburn Lakes Football Club Warriors artwork">
             <div class="art-ring art-ring-one"></div>
             <div class="art-ring art-ring-two"></div>
-            <img src="/assets/lrg-clfc-hero.png" alt="Warriors head and crossed spears club artwork" />
+            <img id="warriorHead" src="/assets/lrg-clfc-hero.png" alt="Warriors head and crossed spears club artwork" />
           </div>
         </section>
 
@@ -124,9 +124,29 @@
         </div>
       </form>
     </dialog>
+    <dialog id="spin-dialog" class="pin-dialog spin-dialog" aria-labelledby="spin-title">
+      <p class="kicker">WARRIORS</p>
+      <h2 id="spin-title">Spin &amp; Win</h2>
+      <div class="spin-stage">
+        <div class="spin-pointer" aria-hidden="true"></div>
+        <svg id="spinWheel" viewBox="0 0 400 400" role="img" aria-label="Names on the wheel"></svg>
+      </div>
+      <p class="spin-result" id="spinResult" aria-live="polite"></p>
+      <p class="spin-count" id="spinCount"></p>
+      <div class="pin-actions">
+        <button type="button" class="button button-ghost" id="spinClose">Close</button>
+        <button type="button" class="button button-primary" id="spinGo">Spin</button>
+      </div>
+    </dialog>
 
     <style>
       .access-msg{line-height:1.5;margin:0}
+      .spin-dialog{width:min(440px,calc(100% - 24px))}
+      .spin-stage{position:relative;width:100%;aspect-ratio:1;margin:12px 0 4px}
+      #spinWheel{width:100%;height:100%;display:block;transform-origin:50% 50%}
+      .spin-pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:24px solid #e10600;z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))}
+      .spin-result{min-height:1.6em;margin:12px 0 2px;text-align:center;font-size:1.2rem;font-weight:800}
+      .spin-count{margin:0;text-align:center;font-size:.85rem;opacity:.7}
       .access-msg a{color:#ffd400;text-decoration:none}
       .register-cta{display:inline-flex;align-items:center;gap:12px;margin-top:28px;padding:20px 38px;font-size:clamp(1.15rem,2.4vw,1.6rem);font-weight:900;letter-spacing:.08em;color:#070b14;background:#ffd400;border-radius:999px;text-decoration:none;box-shadow:0 0 0 0 rgba(255,212,0,.7),0 12px 30px rgba(255,212,0,.35);animation:regpulse 2s infinite;transition:transform .15s ease}
       .register-cta:hover,.register-cta:focus-visible{transform:translateY(-2px) scale(1.03);background:#fff}

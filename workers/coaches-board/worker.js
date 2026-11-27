@@ -440,6 +440,51 @@ async function getLatestDuties(flexi) {
   }
 }
 
+// ---------- Spin & Win (hidden wheel on the hub; signed-in members only) ----------
+// The wheel holds every name in member_directory that has not yet been spun out. Only names and ids
+// leave this code: no PINs, roles or other fields. spin_eliminated (FLEXI) is the shared board, so a
+// name spun out here is gone for everyone.
+async function ensureSpinTable(flexi) {
+  await flexi.prepare(
+    `CREATE TABLE IF NOT EXISTS spin_eliminated (member_id INTEGER PRIMARY KEY, eliminated_at TEXT NOT NULL)`
+  ).run();
+}
+
+async function spinRemaining(env) {
+  await ensureSpinTable(env.FLEXI);
+  const { results: members } = await env.DB.prepare(
+    `SELECT id, first_name, last_name FROM member_directory ORDER BY last_name, first_name, id`
+  ).all();
+  const { results: out } = await env.FLEXI.prepare(`SELECT member_id FROM spin_eliminated`).all();
+  const gone = new Set(out.map((r) => r.member_id));
+  return members
+    .filter((m) => !gone.has(m.id))
+    .map((m) => ({ id: m.id, name: ((m.first_name || "") + " " + (m.last_name || "")).trim() }));
+}
+
+function spinRandomIndex(n) {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % n;
+}
+
+// Picks a random remaining name and records it as spun out. The insert is conditional, so two
+// spins at the same moment cannot both claim the same name; a clash simply picks again.
+async function spinWheel(env) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const remaining = await spinRemaining(env);
+    if (!remaining.length) throw httpError("Everyone has had their spin.", 409);
+    const pick = remaining[spinRandomIndex(remaining.length)];
+    const res = await env.FLEXI.prepare(
+      `INSERT OR IGNORE INTO spin_eliminated (member_id, eliminated_at) VALUES (?1, ?2)`
+    ).bind(pick.id, new Date().toISOString()).run();
+    if (res.meta && res.meta.changes === 1) {
+      return { winner: pick, remaining: remaining.length - 1 };
+    }
+  }
+  throw httpError("The wheel is busy. Try again.", 409);
+}
+
 // ---------- Change PIN (public; a member proves their current PIN, then picks a new one) ----------
 // The new PIN is written to the member's own row (member_directory.id), so their name, duties and
 // history stay attached to them. Wrong current PINs share the duty-check per-IP limit.
@@ -865,6 +910,13 @@ var worker_default = {
       }
       if (pathname === "/api/duties/check" && method === "POST") {
         return json(await checkDutiesByPin(request, env));
+      }
+      if (pathname === "/api/spin/board" && method === "GET") {
+        const remaining = await spinRemaining(env);
+        return json({ members: remaining });
+      }
+      if (pathname === "/api/spin" && method === "POST") {
+        return json(await spinWheel(env));
       }
       if (pathname === "/api/pin/change" && method === "POST") {
         return json(await changePinByMember(request, env));

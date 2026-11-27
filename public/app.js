@@ -188,3 +188,132 @@ if (intro && introVideo) {
     }
   });
 })();
+
+// Spin & Win: opened by tapping the warrior head in the hero. There is no button or hint for it.
+// The server picks the winner and marks that name as out; the wheel only animates to that result.
+(function () {
+  const head = document.getElementById('warriorHead');
+  const dialog = document.getElementById('spin-dialog');
+  const svg = document.getElementById('spinWheel');
+  if (!head || !dialog || !svg) return;
+  const API = 'https://cockburnlakes.com/coaches/api/spin';
+  const NS = 'http://www.w3.org/2000/svg';
+  const result = document.getElementById('spinResult');
+  const count = document.getElementById('spinCount');
+  const go = document.getElementById('spinGo');
+  const closeBtn = document.getElementById('spinClose');
+  const SPIN_MS = 5000;
+  let members = [];
+  let rotation = 0;
+  let spinning = false;
+
+  function setRotation(deg, animate) {
+    svg.style.transition = animate ? 'transform ' + SPIN_MS + 'ms cubic-bezier(.15,.7,.1,1)' : 'none';
+    svg.style.transform = 'rotate(' + deg + 'deg)';
+  }
+
+  function drawWheel() {
+    svg.innerHTML = '';
+    const n = members.length;
+    setRotation(rotation, false);
+    if (!n) return;
+    const cx = 200, cy = 200, r = 196;
+    const slice = 360 / n;
+    const fontSize = Math.max(4, Math.min(13, (2 * Math.PI * 150 / n) * 0.6));
+    for (let i = 0; i < n; i++) {
+      const a0 = (i * slice - 90) * Math.PI / 180;
+      const a1 = ((i + 1) * slice - 90) * Math.PI / 180;
+      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      const light = i % 2 === 1;
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', 'M' + cx + ' ' + cy + ' L' + x0.toFixed(2) + ' ' + y0.toFixed(2) +
+        ' A' + r + ' ' + r + ' 0 ' + (slice > 180 ? 1 : 0) + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z');
+      path.setAttribute('fill', light ? '#ffffff' : '#0b2a6b');
+      path.setAttribute('stroke', '#0b2a6b');
+      path.setAttribute('stroke-width', '0.5');
+      svg.appendChild(path);
+
+      const mid = (i + 0.5) * slice - 90;
+      const label = document.createElementNS(NS, 'text');
+      label.setAttribute('transform', 'rotate(' + mid + ' ' + cx + ' ' + cy + ')');
+      label.setAttribute('x', cx + 186);
+      label.setAttribute('y', cy + fontSize * 0.35);
+      label.setAttribute('text-anchor', 'end');
+      label.setAttribute('font-size', fontSize.toFixed(2));
+      label.setAttribute('font-weight', '700');
+      label.setAttribute('fill', light ? '#0b2a6b' : '#ffffff');
+      const name = members[i].name;
+      label.textContent = name.length > 20 ? name.slice(0, 19) + '…' : name;
+      svg.appendChild(label);
+    }
+    const hub = document.createElementNS(NS, 'circle');
+    hub.setAttribute('cx', cx); hub.setAttribute('cy', cy); hub.setAttribute('r', 22);
+    hub.setAttribute('fill', '#ffd400'); hub.setAttribute('stroke', '#0b2a6b'); hub.setAttribute('stroke-width', '4');
+    svg.appendChild(hub);
+  }
+
+  function updateCount() {
+    count.textContent = members.length + (members.length === 1 ? ' name' : ' names') + ' left on the wheel';
+    go.disabled = members.length === 0;
+    if (!members.length) result.textContent = 'Everyone has had their spin.';
+  }
+
+  async function load() {
+    result.textContent = '';
+    try {
+      const res = await fetch(API + '/board', { cache: 'no-store' });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) { members = []; result.textContent = data.error || 'The wheel is not available right now.'; }
+      else members = data.members || [];
+    } catch (err) {
+      members = [];
+      result.textContent = 'Could not reach the hub. Check your connection.';
+    }
+    drawWheel();
+    updateCount();
+  }
+
+  async function spin() {
+    if (spinning || !members.length) return;
+    spinning = true;
+    go.disabled = true;
+    result.textContent = '';
+    try {
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) { result.textContent = data.error || 'The wheel is not available right now.'; return; }
+
+      const winner = data.winner;
+      const n = members.length;
+      const idx = members.findIndex(function (m) { return m.id === winner.id; });
+      if (idx >= 0) {
+        const slice = 360 / n;
+        // Rotation that puts the winner's slice centre under the pointer at the top, with a little
+        // jitter inside the slice so the stop point looks natural.
+        const target = (360 - ((idx + 0.5) * slice) % 360) % 360;
+        const jitter = (Math.random() - 0.5) * slice * 0.8;
+        rotation = Math.floor(rotation / 360) * 360 + 360 * 5 + target + jitter;
+        setRotation(rotation, true);
+        await new Promise(function (resolve) { window.setTimeout(resolve, SPIN_MS + 150); });
+      }
+
+      members = members.filter(function (m) { return m.id !== winner.id; });
+      result.textContent = winner.name + ' is out!';
+      drawWheel();
+      updateCount();
+    } catch (err) {
+      result.textContent = 'Could not reach the hub. Check your connection.';
+    } finally {
+      spinning = false;
+      go.disabled = members.length === 0;
+    }
+  }
+
+  head.addEventListener('click', function () {
+    if (!dialog.open) dialog.showModal();
+    load();
+  });
+  closeBtn.addEventListener('click', function () { if (!spinning) dialog.close(); });
+  go.addEventListener('click', spin);
+})();
