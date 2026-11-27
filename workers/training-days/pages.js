@@ -114,14 +114,14 @@ export var NOTICEBOARD_PAGE = `<!doctype html>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #0b1a3a; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-  .board { position: relative; width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 941 / 1673; background: #0b1a3a url('__BASE__/noticeboard.png') center / 100% 100% no-repeat; container-type: inline-size; overflow: hidden; }
+  .board { position: relative; width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 1024 / 1536; background: #0b1a3a url('__BASE__/noticeboard.png') center / 100% 100% no-repeat; container-type: inline-size; overflow: hidden; }
   .abs { position: absolute; }
   .postform { left: 0; top: 0; width: 100%; height: 100%; margin: 0; pointer-events: none; }
-  #pin { position: absolute; pointer-events: auto; left: 40.9%; top: 32.1%; width: 27.6%; height: 4.7%; border: 0; border-radius: 0; background: transparent; color: #0b2a6b; font: inherit; font-size: 5cqw; font-weight: 700; padding: 0 3cqw; outline: none; }
-  #submit { position: absolute; pointer-events: auto; left: 71.4%; top: 31.5%; width: 25.5%; height: 5.4%; border: 0; border-radius: 0; padding: 0; background: transparent; color: transparent; cursor: pointer; }
+  #pin { position: absolute; pointer-events: auto; left: 39.8%; top: 37.1%; width: 26.9%; height: 4.9%; border: 0; border-radius: 0; background: transparent; color: #0b2a6b; font: inherit; font-size: 5cqw; font-weight: 700; padding: 0 3cqw; outline: none; }
+  #submit { position: absolute; pointer-events: auto; left: 70.1%; top: 36.5%; width: 26.6%; height: 6.0%; border: 0; border-radius: 0; padding: 0; background: transparent; color: transparent; cursor: pointer; }
   #submit:disabled { cursor: default; }
-  #sessionLabel { position: absolute; left: 50.7%; top: 39.4%; width: 46.5%; height: 4.8%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 4.4cqw; text-align: center; white-space: nowrap; overflow: hidden; }
-  #rows { position: absolute; left: 3.2%; top: 44.2%; width: 93.9%; height: 45.7%; overflow-y: auto; background: #fff; }
+  #sessionLabel { position: absolute; left: 60%; top: 44.6%; width: 35%; height: 4.8%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 3.3cqw; text-align: center; white-space: nowrap; overflow: hidden; }
+  #rows { position: absolute; left: 2.8%; top: 49.7%; width: 94.2%; height: 36.2%; overflow-y: auto; background: #fff; }
   .r { display: grid; grid-template-columns: 49.8% 50.2%; height: 5.2cqw; }
   .r:nth-child(odd) { background: #ffffff; }
   .r:nth-child(even) { background: #d7e5f7; }
