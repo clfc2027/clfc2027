@@ -31,7 +31,6 @@ var BOARD_GRADES = [
   { id: "colts", grade_name: "Colts", sort_order: 3 },
   { id: "thirds", grade_name: "Thirds", sort_order: 4 }
 ];
-// Shared coaches PIN, kept in the COACH_PIN secret. A missing secret keeps the board locked.
 // 2026 compare: each board reads last year's team from PlayHQ on request. Nothing is copied from the main database.
 var COMPARE_YEAR = 2026;
 var COMPARE_TEAMS = {
@@ -185,18 +184,40 @@ async function assertGrade(db, gradeId) {
   return row;
 }
 
-// Checks the shared coaches PIN against the COACH_PIN secret. Fails closed if the secret is missing.
+// Board access. Each board PIN is the member's own PIN in member_directory.
+// Gavin Caporn (member 55) is the admin master override: every board, every grade.
+// Coaches see only the grades listed here, keyed by member id.
+var ADMIN_MEMBER_ID = 55;
+var COACH_GRADES = {
+  87: ["thirds"],    // Jeremy Dowsett
+  59: ["reserves"],  // Heath Thorpe
+  129: ["reserves"], // Ryan Austin
+  185: ["colts"],    // Ernie Brackin
+  198: ["league"]    // Tully Misich
+};
+
+// Checks a board PIN. Returns { admin, grades }: grades is null for admin, otherwise the grade ids the PIN may open.
+// Fails closed: a PIN that matches no admin or listed coach is refused.
 async function verifyBoardPin(env, db, pin) {
-  if (!env.COACH_PIN) throw httpError("The coaches PIN is not set up on the server", 500);
   await ensureBoard(db);
   const row = await db.prepare(`SELECT failed_attempts, locked_until FROM board_pin_state WHERE id = 1`).first();
   if (row.locked_until && new Date(row.locked_until) > new Date()) {
     throw httpError("Too many wrong PINs. Try again in a few minutes.", 429);
   }
   const given = typeof pin === "string" ? pin : "";
-  if (constantTimeEqual(given, env.COACH_PIN)) {
+  const members = given
+    ? ((await db.prepare(`SELECT id, role FROM member_directory WHERE pin = ?1`).bind(given).all()).results || [])
+    : [];
+  let access = null;
+  if (members.some((m) => m.id === ADMIN_MEMBER_ID)) {
+    access = { admin: true, grades: null };
+  } else {
+    const coach = members.find((m) => m.role === "coach" && COACH_GRADES[m.id]);
+    if (coach) access = { admin: false, grades: COACH_GRADES[coach.id] };
+  }
+  if (access) {
     await db.prepare(`UPDATE board_pin_state SET failed_attempts = 0, locked_until = NULL WHERE id = 1`).run();
-    return;
+    return access;
   }
   const fails = row.failed_attempts + 1;
   if (fails >= PIN_MAX_FAILS) {
@@ -208,11 +229,14 @@ async function verifyBoardPin(env, db, pin) {
   throw httpError("Wrong PIN", 401);
 }
 
-// Every coach-facing read and write checks the grade exists and the shared PIN.
+// Every coach-facing read and write checks the grade exists, the PIN, and that the PIN may open this grade.
 async function requireCoach(request, env, gradeId) {
   if (!gradeId) throw httpError("grade_id is required", 400);
   await assertGrade(env.FLEXI, gradeId);
-  await verifyBoardPin(env, env.FLEXI, request.headers.get("x-coach-pin") || "");
+  const access = await verifyBoardPin(env, env.FLEXI, request.headers.get("x-coach-pin") || "");
+  if (access.grades && !access.grades.includes(String(gradeId))) {
+    throw httpError("This PIN cannot open that grade", 403);
+  }
 }
 
 async function getGrades(db) {
@@ -896,8 +920,8 @@ var worker_default = {
       if (pathname === "/api/grades") return json(await getGrades(env.FLEXI));
       if (pathname === "/api/coach/verify" && method === "POST") {
         const { pin } = await request.json();
-        await verifyBoardPin(env, env.FLEXI, pin);
-        return json({ ok: true });
+        const access = await verifyBoardPin(env, env.FLEXI, pin);
+        return json({ ok: true, grades: access.grades });
       }
       if (pathname === "/api/published/latest" && method === "GET") {
         return json(await getLatestPublished(env.FLEXI, url.searchParams.get("grade_id")));

@@ -9,6 +9,7 @@ const CMP_YEAR = window.__COMPARE_YEAR__;
 
 let state = {
   grades: [],
+  allGrades: [],
   gradeId: "",
   round: "",
   opponent: "",
@@ -105,7 +106,17 @@ async function unlock(pin, silent) {
   state.busy = true;
   state.gateError = "";
   try {
-    await postJson("/api/coach/verify", { pin: pin });
+    const res = await postJson("/api/coach/verify", { pin: pin });
+    // A coach PIN opens only its own grades: the grade list and selection are narrowed to match.
+    if (res && Array.isArray(res.grades)) {
+      const allowed = (state.allGrades.length ? state.allGrades : state.grades).filter((g) => res.grades.includes(String(g.grade_id)));
+      state.grades = allowed;
+      state.gradeId = allowed.length ? String(allowed[0].grade_id) : "";
+      resetBoard();
+    } else if (state.allGrades.length) {
+      state.grades = state.allGrades;
+      if (!state.grades.some((g) => String(g.grade_id) === String(state.gradeId))) state.gradeId = String(state.grades[0].grade_id);
+    }
     state.pin = pin;
     state.unlocked = true;
     sessionStorage.setItem(PIN_KEY, pin);
@@ -142,6 +153,7 @@ async function init() {
   try {
     const { grades } = await api("/api/grades");
     state.grades = grades;
+    state.allGrades = grades;
     if (grades.length) state.gradeId = String(grades[0].grade_id);
     const stored = sessionStorage.getItem(PIN_KEY);
     if (stored) await unlock(stored, true);
