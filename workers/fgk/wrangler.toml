@@ -3,6 +3,10 @@ name = "fgk"
 main = "worker.js"
 compatibility_date = "2026-08-31"
 
+# Members reach this only through cockburnlakes.com (behind the club gate), never the workers.dev address.
+workers_dev = false
+preview_urls = false
+
 # Bindings and secrets set in the Cloudflare dashboard:
 #   D1 binding DB -> playhq-warriors (confirm database_id in Settings > Bindings)
 #   Secret ADMIN_PASSCODE

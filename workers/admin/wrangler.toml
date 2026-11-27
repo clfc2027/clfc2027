@@ -3,6 +3,10 @@ name = "admin"
 main = "worker.js"
 compatibility_date = "2026-08-31" # TODO: confirm in dashboard Settings
 
+# Members reach this only through cockburnlakes.com (behind the club gate), never the workers.dev address.
+workers_dev = false
+preview_urls = false
+
 # No cron triggers: the PlayHQ sync runs by hand only.
 
 [[d1_databases]]
