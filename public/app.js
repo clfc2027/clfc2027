@@ -132,3 +132,59 @@ if (intro && introVideo) {
     })
     .catch(function () { el.textContent = "unavailable"; });
 })();
+
+// Change PIN: the member proves their current PIN, then sets a new one. The server changes their own
+// member row, so their name, duties and history stay attached to them. The left half of the banner is
+// the Request PIN SMS link (handled in index.html); this is the right half.
+(function () {
+  const openBtn = document.getElementById('changePinOpen');
+  const dialog = document.getElementById('change-pin-dialog');
+  const form = document.getElementById('changePinForm');
+  if (!openBtn || !dialog || !form) return;
+  const API = 'https://cockburnlakes.com/coaches/api/pin/change';
+  const msg = document.getElementById('changePinMsg');
+  const submit = document.getElementById('changePinSubmit');
+  const cancel = document.getElementById('changePinCancel');
+
+  function say(text, isError) {
+    msg.textContent = text;
+    msg.style.color = isError ? '#ff6b6b' : '#ffd400';
+  }
+
+  openBtn.addEventListener('click', function () {
+    form.reset();
+    say('', false);
+    dialog.showModal();
+  });
+  cancel.addEventListener('click', function () { dialog.close(); });
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const currentPin = document.getElementById('curPin').value.trim();
+    const newPin = document.getElementById('newPin').value.trim();
+    const repeatPin = document.getElementById('newPin2').value.trim();
+    if (!/^[0-9]{4}$/.test(currentPin)) return say('Enter your current 4-digit PIN.', true);
+    if (!/^[0-9]{4}$/.test(newPin)) return say('Your new PIN must be 4 digits.', true);
+    if (newPin !== repeatPin) return say('The new PINs do not match.', true);
+    if (newPin === currentPin) return say('Choose a PIN different from your current one.', true);
+
+    submit.disabled = true;
+    say('Saving...', false);
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPin: currentPin, newPin: newPin })
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) return say(data.error || 'Could not change your PIN right now. Try again shortly.', true);
+      form.reset();
+      say('Done. Use your new PIN from now on.', false);
+      window.setTimeout(function () { dialog.close(); }, 1800);
+    } catch (err) {
+      say('Could not reach the hub. Check your connection and try again.', true);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+})();
