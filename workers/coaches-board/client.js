@@ -54,6 +54,9 @@ function refreshDisplay() {
   cards.forEach((c, i) => { c.display = shown[i]; });
 }
 
+// Big banner label: the team on the sheet.
+const TEAM_LABELS = { league: "LEAGUE", reserves: "RESERVES", colts: "COLTS", thirds: "THIRDS" };
+
 function currentGrade() {
   return state.grades.find((g) => String(g.grade_id) === String(state.gradeId));
 }
@@ -247,7 +250,7 @@ function render() {
 
     <div class="team-banner">
       <div class="club">COCKBURN LAKES FOOTBALL CLUB</div>
-      <div class="grade">\${grade ? grade.grade_name : "SELECT A GRADE"}</div>
+      <div class="grade">\${grade ? (TEAM_LABELS[String(grade.grade_id)] || grade.grade_name) : "SELECT A GRADE"}</div>
       <div class="round">\${state.round ? state.round.toUpperCase() : "ROUND —"}\${state.venue ? " · " + state.venue : ""}</div>
       <div class="versus">
         <span>COCKBURN LAKES</span>
