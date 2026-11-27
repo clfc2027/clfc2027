@@ -1,0 +1,21 @@
+name: Upload hub icon to R2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload pin-change-request-icon.png to hub-icons
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: .
+          command: r2 object put hub-icons/pin-change-request-icon.png --file=r2-uploads/pin-change-request-icon.png --content-type image/png --remote
