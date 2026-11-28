@@ -352,7 +352,7 @@ export default {
         return page(request, ADMIN_HTML);
       }
       if ((method === "GET" || method === "HEAD") && pathname === "/wallpaper-fine") {
-        return serveR2(env.CLFC_ASSETS, "wallpaper-fine.png", "public, max-age=3600");
+        return serveR2(env.CLFC_ASSETS, "wallpaper-fine.jpg", "public, max-age=3600");
       }
 
       if (pathname === "/api/fines" && method === "GET") {
