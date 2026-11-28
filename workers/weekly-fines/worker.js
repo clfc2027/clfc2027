@@ -4,7 +4,7 @@
 // D1 binding FLEXI -> clfc2026-flexi (weekly_fines, fines_pin_attempts; shared with coaches-board)
 // Secret ADMIN_PASSCODE (dashboard, never in the repo)
 //
-// Public:  GET /, GET /nominate, GET /admin, GET /wallpaper-fine, GET /api/fines, POST /api/fines
+// Public:  GET /, GET /nominate, GET /admin, GET /wallpaper-fine, GET /fine-card, GET /api/fines, POST /api/fines
 // Admin:   POST /api/admin/fines (list, nominator names shown), POST /api/admin/fines/:id/paid,
 //          POST /api/admin/fines/:id/reopen, POST /api/admin/fines/:id/delete
 //
@@ -191,7 +191,7 @@ async function listOpenFines(flexi) {
     const p = people.get(row.target_key);
     p.owed_cents += FINE_CENTS;
     p.count += 1;
-    p.fines.push({ reason: row.reason, date: perthDate(new Date(row.created_at)) });
+    p.fines.push({ reason: row.reason, date: perthDate(new Date(row.created_at)), created_at: row.created_at });
   }
   const list = [...people.values()].sort(
     (a, b) => b.owed_cents - a.owed_cents || a.name.localeCompare(b.name)
@@ -353,6 +353,9 @@ export default {
       }
       if ((method === "GET" || method === "HEAD") && pathname === "/wallpaper-fine") {
         return serveR2(env.CLFC_ASSETS, "wallpaper-fine.jpg", "public, max-age=3600");
+      }
+      if ((method === "GET" || method === "HEAD") && pathname === "/fine-card") {
+        return serveR2(env.CLFC_ASSETS, "fine-card.jpg", "public, max-age=3600");
       }
 
       if (pathname === "/api/fines" && method === "GET") {
