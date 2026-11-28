@@ -224,7 +224,16 @@ test("public and admin pages are served by the Worker", async () => {
   const home = await call(env, "GET", "/");
   assert.equal(home.status, 200);
   assert.match(home.headers.get("content-type"), /text\/html/);
-  assert.match(await home.text(), /Nominate someone/);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /href="\/fines\/nominate"/);
+  assert.match(homeHtml, /Return to hub/);
+  assert.doesNotMatch(homeHtml, /Who owes/);
+  const nominate = await call(env, "GET", "/fines/nominate");
+  assert.equal(nominate.status, 200);
+  const nominateHtml = await nominate.text();
+  assert.match(nominateHtml, /Submit nomination/);
+  assert.match(nominateHtml, /Back to fines/);
+  assert.match(nominateHtml, /Return to hub/);
   const admin = await call(env, "GET", "/admin");
   assert.equal(admin.status, 200);
   assert.match(await admin.text(), /Weekly Fines admin/);
