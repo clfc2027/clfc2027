@@ -1,6 +1,6 @@
 // Page templates for the weekly-fines Worker.
 // Edit the HTML here: this file is the only copy (no static assets, so nothing extra to upload).
-// The wallpaper is the R2 object "wallpaper-fine" in the clfc-assets bucket, served at /fines/wallpaper-fine.
+// The wallpaper is the R2 object "wallpaper-fine.png" in the clfc-assets bucket, served at /fines/wallpaper-fine.
 
 const BACK_BUTTONS = `
   <div class="topbar">
