@@ -19,7 +19,7 @@ binding = "FLEXI"
 database_name = "clfc2026-flexi"
 database_id = "59096bce-7645-4f7b-a757-04290b67b063"
 
-# Wallpaper for the fines pages (wallpaper.jpg in the clfc-assets bucket).
+# Wallpaper for the fines pages (wallpaper-fine in the clfc-assets bucket).
 [[r2_buckets]]
 binding = "CLFC_ASSETS"
 bucket_name = "clfc-assets"

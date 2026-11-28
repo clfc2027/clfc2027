@@ -4,7 +4,7 @@
 // D1 binding FLEXI -> clfc2026-flexi (weekly_fines, fines_pin_attempts; shared with coaches-board)
 // Secret ADMIN_PASSCODE (dashboard, never in the repo)
 //
-// Public:  GET /, GET /admin, GET /api/fines, POST /api/fines
+// Public:  GET /, GET /nominate, GET /admin, GET /wallpaper-fine, GET /api/fines, POST /api/fines
 // Admin:   POST /api/admin/fines (list, nominator names shown), POST /api/admin/fines/:id/paid,
 //          POST /api/admin/fines/:id/reopen, POST /api/admin/fines/:id/delete
 //
@@ -12,7 +12,7 @@
 // A nominator's identity is stored as playhq_player_id and never returned by any public route.
 
 import { passcodeState } from "../../shared/auth.js";
-import { INDEX_HTML, ADMIN_HTML } from "./pages.js";
+import { INDEX_HTML, NOMINATE_HTML, ADMIN_HTML } from "./pages.js";
 
 export const FINE_CENTS = 200;
 export const MAX_WORDS = 49; // "less than 50 words"
@@ -345,11 +345,14 @@ export default {
       if ((method === "GET" || method === "HEAD") && pathname === "/") {
         return page(request, INDEX_HTML);
       }
+      if ((method === "GET" || method === "HEAD") && pathname === "/nominate") {
+        return page(request, NOMINATE_HTML);
+      }
       if ((method === "GET" || method === "HEAD") && pathname === "/admin") {
         return page(request, ADMIN_HTML);
       }
-      if ((method === "GET" || method === "HEAD") && pathname === "/wallpaper.jpg") {
-        return serveR2(env.CLFC_ASSETS, "wallpaper.jpg", "public, max-age=3600");
+      if ((method === "GET" || method === "HEAD") && pathname === "/wallpaper-fine") {
+        return serveR2(env.CLFC_ASSETS, "wallpaper-fine", "public, max-age=3600");
       }
 
       if (pathname === "/api/fines" && method === "GET") {
