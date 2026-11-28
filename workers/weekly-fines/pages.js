@@ -21,10 +21,16 @@ export const INDEX_HTML = `<!DOCTYPE html>
   .topbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center; max-width: 600px; margin: 0 auto; padding: 12px 12px 0; }
   .btn { display: inline-block; background: var(--navy); color: #fff; text-decoration: none; font-weight: 600; padding: 9px 14px; border-radius: 6px; font-size: .95rem; }
   .btn.light { background: #eef0f4; color: var(--navy); }
-  .poster { position: relative; max-width: 600px; margin: 12px auto 0; }
-  .poster img { display: block; width: 100%; height: auto; }
+  .stage { position: relative; max-width: 600px; margin: 12px auto 0; aspect-ratio: 1024 / 1536; background: url("/fines/wallpaper-fine") center / 100% 100% no-repeat; }
+  .wall { position: absolute; left: 13%; top: 6%; width: 74%; height: 74%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px; }
+  .wall-empty { margin: auto; background: rgba(255,255,255,.9); padding: 8px 12px; border-radius: 8px; font-weight: 600; text-align: center; font-size: .95rem; }
+  .card { position: relative; flex: 0 0 auto; width: 100%; aspect-ratio: 1536 / 1024; background: url("/fines/fine-card") center / 100% 100% no-repeat; }
+  .card-text { position: absolute; left: 14%; right: 14%; top: 17%; bottom: 15%; display: flex; flex-direction: column; justify-content: center; overflow: hidden; color: #fff; text-align: center; }
+  .card-name { margin: 0 0 .3em; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; word-break: break-word; }
+  .card-reason { margin: 0; line-height: 1.3; word-break: break-word; }
+  .card-meta { margin-top: .4em; font-size: .75em; opacity: .85; }
   .fine-btn { position: absolute; left: 51.2%; top: 86.8%; width: 44.2%; height: 10.2%; border-radius: 12px; }
-  .fine-btn:hover { background: rgba(255, 255, 255, .12); }
+  .fine-btn:hover { background: rgba(255,255,255,.12); }
   .fine-btn:focus-visible { outline: 3px solid #fca311; outline-offset: 3px; }
   .footer { max-width: 600px; margin: 0 auto; padding: 12px; text-align: center; font-size: .9rem; }
   .footer a { color: var(--navy); }
@@ -34,11 +40,71 @@ export const INDEX_HTML = `<!DOCTYPE html>
   <div class="topbar">
     <a class="btn light" href="/">&larr; Return to hub</a>
   </div>
-  <main class="poster">
-    <img src="/fines/wallpaper-fine" alt="Weekly Fines: Punishment Wheel and Fine Someone">
+  <main class="stage">
+    <div class="wall" id="wall"><p class="wall-empty">Loading…</p></div>
     <a class="fine-btn" href="/fines/nominate" aria-label="Fine someone"></a>
   </main>
   <p class="footer"><a href="/fines/admin">Admin</a></p>
+
+<script>
+(function () {
+  var BASE = location.pathname.indexOf("/fines") === 0 ? "/fines" : "";
+  var wall = document.getElementById("wall");
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  // Shrink the text until it fits inside the card.
+  function fit(box) {
+    var size = 18;
+    box.style.fontSize = size + "px";
+    while (size > 6 && box.scrollHeight > box.clientHeight) {
+      size -= 1;
+      box.style.fontSize = size + "px";
+    }
+  }
+
+  function render(people) {
+    var cards = [];
+    people.forEach(function (p) {
+      p.fines.forEach(function (f) {
+        cards.push({ name: p.name, reason: f.reason, date: f.date, at: f.created_at });
+      });
+    });
+    cards.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    wall.textContent = "";
+    if (!cards.length) {
+      wall.appendChild(el("p", "wall-empty", "No fines on the wall right now."));
+      return;
+    }
+    cards.forEach(function (c) {
+      var card = el("div", "card");
+      var text = el("div", "card-text");
+      text.appendChild(el("p", "card-name", c.name));
+      text.appendChild(el("p", "card-reason", c.reason));
+      text.appendChild(el("div", "card-meta", c.date));
+      card.appendChild(text);
+      wall.appendChild(card);
+      fit(text);
+    });
+  }
+
+  fetch(BASE + "/api/fines", { cache: "no-store" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) throw new Error(d.error || "unavailable");
+      render(d.people);
+    })
+    .catch(function () {
+      wall.textContent = "";
+      wall.appendChild(el("p", "wall-empty", "Could not load the fines. Refresh to try again."));
+    });
+})();
+</script>
 </body>
 </html>
 `;

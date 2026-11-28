@@ -228,6 +228,8 @@ test("public and admin pages are served by the Worker", async () => {
   assert.match(homeHtml, /href="\/fines\/nominate"/);
   assert.match(homeHtml, /Return to hub/);
   assert.doesNotMatch(homeHtml, /Who owes/);
+  assert.match(homeHtml, /id="wall"/);
+  assert.match(homeHtml, /\/fines\/fine-card/);
   const nominate = await call(env, "GET", "/fines/nominate");
   assert.equal(nominate.status, 200);
   const nominateHtml = await nominate.text();
